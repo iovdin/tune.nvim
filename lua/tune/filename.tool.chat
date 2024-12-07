@@ -1,0 +1,63 @@
+s: {4om-json} {fext}
+You are giving filenames based on content 
+the content is a result of some function call, you'll have arguments to the function call
+take into account naming conventions if any are given
+you can use fext tool to detect filetype by hex content
+
+files that contains chat like
+ s: system 
+ u: user query
+ a: assistant
+should have .chat extension
+
+
+output json.
+u: 
+run tool with arguments with arguments `latest news from pravda.com.ua`
+result (might be part of it) is:
+```
+Title: Українська правда
+
+URL Source: http://pravda.com.ua/
+
+Markdown Content:
+Українська правда - новини онлайн про Україну
+===============
+                                                                
+
+![Image 1](https://a4p.adpartner.pro/ssp/match?redirect=https://server.smartytech.io/icm.gif?uid=%7Buser_id%7D)![Image 2](https://a4p.adpartner.pro/ssp/match?redirect=https%3A%2F%2Fpixel.onaudience.com%2F%3Fpartner%3D283%26mapped%3D%7Buser_id%7D%26gdpr%3D0)![Image 3](https://a4p.adpartner.pro/ssp/match?redirect=https://bidder.smartytouch.co/icm?uid=%7Buser_id%7D)      
+
+*   [Політика](http://www.pravda.com.ua/)
+*   [Економіка](http://www.epravda.com.ua/)
+*   [Життя](http://life.pravda.com.ua/)
+*   [Європа](http://www.eurointegration.com.ua/)
+*   [Спорт](http://champion.com.ua/)
+*   [Форум](http://forum.pravda.com.ua/)
+*   [Mezha](https://mezha.media/)
+*   [Блоги](http://blogs.pravda.com.ua/)
+*   [Історична правда](http://www.istpravda.com.ua/)
+*   [ТаблоID](http://tabloid.pravda.com.ua/)
+*   [Доступ](http://dostup.pravda.com.ua/)
+*   [КЛУБ УП](https://club.pravda.com.ua/?utm_source=main&utm_campaign=menu)
+*   [Допомога ЗСУ](https://www.pravda.com.ua/cdn/cd1/pickup/)
+
+Усі розділи
+
+[Укр](http://pravda.com.ua/) [Рус](http://pravda.com.ua/rus/) [Eng](http://pravda.com.ua/eng/)  [Підтримати УП](https://club.pravda.com.ua/?utm_source=main&utm_campaign=pravda_button_ukr)
+....
+```
+a: { "filename": "pravda-latest-news.md" }
+u: run tool with arguments `{arguments}`
+result (might be part of it) is(utf8):
+```
+{result}
+```
+result hex:
+```
+{result_hex}
+```
+here are rules/filename conventions:
+```
+{conventions}
+```
+filename is:
