@@ -3,7 +3,6 @@ vim.filetype.add({
     chat = "chat",
   }
 })
-print("filedetect")
 
 
 local ok, parsers = pcall(require, "nvim-treesitter.parsers")
@@ -21,5 +20,4 @@ if ok then
     },
     filetype = "chat",
   }
-  print(vim.inspect(parser_config))
 end
