@@ -148,8 +148,8 @@ local function tune_chat(opts, callback)
     end
 
     vim.schedule(function()
-      restore_key('<Esc>')
-      restore_key('<C-c>')
+      -- restore_key('<Esc>')
+      -- restore_key('<C-c>')
       if new_lines == nil or split == nil or tune_pid[bufnr] ~= nil then
         return
       end
@@ -186,8 +186,8 @@ local function tune_chat(opts, callback)
   tune_pid[bufnr] = pid
   -- print("start " .. pid)
 
-  push_key('<Esc>')
-  push_key('<C-c>')
+  --push_key('<Esc>')
+  --push_key('<C-c>')
   stdin:write(vim.json.encode({ input = table.concat(lines, "\n")}))
   
   timer:start(0, 100, function()
@@ -256,73 +256,60 @@ end
 
 local M = {}
 
--- Core plugin functionality
-function M.setup(opts)
-  opts = opts or {}
-  print("setup tune.nvim")
+local default_keymaps = {
+  n = {
+    ["<CR>"] = { ":TuneChat<CR>", "Execute TuneChat" },
+    ["<Esc>"] = { ":TuneKill<CR>", "Execute TuneKill" },    -- New keymap
+    ["<C-c>"] = { ":TuneKill<CR>", "Execute TuneKill" },  -- New keymap
+  },
+  i = {
+    ["<S-CR>"] = { "<Esc>:TuneChat<CR>", "Execute TuneChat in Insert Mode" },
+    ["<C-c>"] = { "<Esc>:TuneKill<CR>", "Execute TuneKill in Insert Mode" },  -- New keymap
+  },
+}
 
-  local dest_dir = vim.fn.stdpath("config") .. "/after/queries/chat"
-  local dest = dest_dir .. "/highlights.scm"
 
-  -- Create directory if it doesn't exist
-  vim.fn.mkdir(dest_dir, "p")
+local function setup_buffer(opts)
 
-  -- Copy file if it doesn't exist
-  local content = [[
-((role) @role.user
- (#eq? @role.user "u:"))
+  local keymaps = vim.tbl_deep_extend("force", default_keymaps, opts.keymaps or {})
+    vim.api.nvim_buf_create_user_command(0, "TuneChat", tune_chat, {})
+    vim.api.nvim_buf_create_user_command(0, "TuneKill", tune_kill, {})
 
-((role) @role.assistant
- (#eq? @role.assistant "a:"))
+      vim.bo.fileencoding = "utf-8"
+      -- how to overwrite these keymaps
+      for mode, mappings in pairs(keymaps) do
+        for lhs, rhs in pairs(mappings) do
+          if rhs ~= false then
+            local opts = {
+              noremap = true,
+              silent = true,
+              desc = rhs[2],
+              buffer = true, -- Buffer-local
+            }
+            vim.keymap.set(mode, lhs, rhs[1], opts)
+          end
+        end
+      end
+end
 
-((role) @role.system
- (#eq? @role.system "s:"))
-
-((role) @role.tool_call
- (#eq? @role.tool_call "tc:"))
-
-((role) @role.tool_result
- (#eq? @role.tool_result "tr:"))
-
-((role) @role.comment
- (#eq? @role.comment "c:"))
-
-((role) @role.err
- (#eq? @role.err "err:"))
-]]
-  if vim.fn.filereadable(dest) == 0 then
-      vim.fn.writefile(vim.split(content, "\n"), dest)
-  end
+local function setup(opts)
+  local keymaps = vim.tbl_deep_extend("force", default_keymaps, opts.keymaps or {})
 
   vim.api.nvim_create_augroup("ChatAutoComplete", { clear = true })
+
+  if vim.bo.filetype == "chat" then
+    setup_buffer(opts)
+  end
+
 
   vim.api.nvim_create_autocmd("FileType", {
     group = "ChatAutoComplete",
     pattern = "chat",
     callback = function()
-      vim.api.nvim_create_user_command("TuneChat", tune_chat, {})
-      vim.api.nvim_create_user_command("TuneKill", tune_kill, {})
-
-      vim.opt.fileencoding = "utf-8"
-      vim.api.nvim_buf_set_keymap(0, "n", "<CR>", ":TuneChat<CR>", { noremap = true, silent = true })
-      vim.api.nvim_buf_set_keymap(0, "i", "<S-CR>", "<Esc>:TuneChat<CR>", { noremap = true, silent = true })
-      vim.api.nvim_set_hl(0, "@role", { fg = 'white', bg = 'gray'})
-      vim.api.nvim_set_hl(0, "@role.system", { fg = 'white', bg = 'gray'})
-      vim.api.nvim_set_hl(0, "@role.user", { fg = 'white', bg = 'blue'})
-      vim.api.nvim_set_hl(0, "@role.assistant", { fg = 'white', bg = 'green'})
-      vim.api.nvim_set_hl(0, "@role.tool_call", { fg = 'white', bg = 'gray'})
-      vim.api.nvim_set_hl(0, "@role.tool_result", { fg = 'white', bg = 'gray'})
-      vim.api.nvim_set_hl(0, "@role.comment", { fg = 'white', bg = 'gray'})
-      vim.api.nvim_set_hl(0, "@role.err", { fg = 'white', bg = 'red'})
-
+       setup_buffer(opts)
     end,
   })
 
-  vim.filetype.add({
-    extension = {
-      chat = "chat",
-    }
-  })
 
   local ok, parsers = pcall(require, "nvim-treesitter.parsers")
   if not ok then
@@ -343,6 +330,13 @@ function M.setup(opts)
     },
     filetype = "chat",
   }
+end
+
+
+
+-- Core plugin functionality
+function M.setup(opts)
+  setup(opts or {})
 end
 
 return M
