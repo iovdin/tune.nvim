@@ -38,36 +38,6 @@ local function tune_kill()
   end
 end
 
-local function getkey(key)
-  local keymaps = vim.api.nvim_get_keymap('n')
-  for _, map in ipairs(keymaps) do
-    -- Compare the lhs (left-hand side) with the desired key
-    if map.lhs == key then
-      return map.rhs
-    end
-  end
-end
-
-local function restore_key(key)
-    local cur_key = getkey(key)
-    if cur_key then
-      if tune_temp[key] then
-        vim.api.nvim_set_keymap('n', key, tune_temp[key], { noremap = true, silent = true })
-        tune_temp[key] = nil
-      else
-        vim.api.nvim_del_keymap('n', key)
-      end
-    end
-end
-
-local function push_key(key)
-  local cur_key = getkey(key)
-  if cur_key ~= nil and cur_key ~= kill_cmd  then
-    tune_temp[key] = cur_key
-  end
-  vim.api.nvim_set_keymap('n', key, kill_cmd, { noremap = true, silent = true })
-end
-
 local function set_cursor(bufnr, row, col)
    if row > vim.api.nvim_buf_line_count(bufnr) then
      return
@@ -148,9 +118,7 @@ local function tune_chat(opts, callback)
     end
 
     vim.schedule(function()
-      -- restore_key('<Esc>')
-      -- restore_key('<C-c>')
-      if new_lines == nil or split == nil or tune_pid[bufnr] ~= nil then
+      if split == nil or tune_pid[bufnr] ~= nil then
         return
       end
 
@@ -167,6 +135,10 @@ local function tune_chat(opts, callback)
 
       -- vim.cmd("earlier " ..  num_changes)
       -- vim.api.nvim_buf_set_lines(bufnr, split["mid"], split["end"], true, new_lines)
+      if s_start == nil then
+        s_start = split["mid"]
+        s_end = split["end"]
+      end
       vim.api.nvim_buf_set_lines(bufnr, s_start, s_end, true, new_lines)
       s_end = split["mid"] + #new_lines 
       col = 0

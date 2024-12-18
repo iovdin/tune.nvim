@@ -2746,7 +2746,7 @@ function msg2text(msg) {
             var args, text;
             var args;
             var text;
-            args = dJSON.parse(tc.function.arguments);
+            args = dJSON.parse(tc.function.arguments || "{}");
             text = args.text;
             delete args.text;
             args = (Object.keys(args).length ? JSON.stringify(args) : undefined);
