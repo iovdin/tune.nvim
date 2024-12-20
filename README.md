@@ -1,3 +1,7 @@
+
+<img src="https://github.com/user-attachments/assets/2fb43eca-6a8c-4acd-9fee-0116e2c64a58" width="80%">
+
+
 ## Installation
 
 There are several ways to install this plugin:
