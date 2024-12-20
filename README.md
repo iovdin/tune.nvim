@@ -1,10 +1,82 @@
+# tune.nvim
+
+A Neovim plugin to chat with LLM in buffer.
+
+## Why tune.nvim?
+
+- **Native Editor Experience**: Chat with LLMs using your familiar text editor environment and keybindings
+- **File-Based Chat**: Store and organize your conversations in `.chat` files
+- **Variable Expansion**: Easily include content from files, environment variables, and even images in your prompts
+- **Tool Integration**: Create and use custom tools (Python, JavaScript, PHP, or even chat-based) for extended functionality
+- **Flexible LLM Configuration**: Support for different LLM providers through simple configuration files
+- **Structured Chat Format**: Clear syntax for different message types (system, user, assistant, etc.)
+
+## Demo
 
 <img src="https://github.com/user-attachments/assets/2fb43eca-6a8c-4acd-9fee-0116e2c64a58" width="80%">
 
+## Features
+
+### Chat File Format
+
+Use `.chat` files with a clear syntax for different message types:
+```chat
+ s: system prompt
+ u: user message
+ a: assistant reply
+ c: comment
+ tc: tool call
+ tr: result of a tool call
+ err: error that occurred
+```
+
+### Variable Expansion
+
+Include external content in your chats:
+```chat
+ s: {system}           # Expand from system.txt
+ u: {env_variable}     # Use environment variables
+ u: describe {image}   # Include images
+```
+
+### Multiple Chats
+
+Separate multiple conversations in a single file:
+```chat
+ s: You're groot
+ u: hi how are you?
+ a: I am Groot.
+ c: ---
+ u: What is the meaning of life?
+ a: 42
+```
+
+### Default Keymaps
+
+- `<CR>` in normal mode: Execute TuneChat
+- `<S-CR>` in insert mode: Execute TuneChat
+- `<Esc>` or `<C-c>` in any mode: Cancel generation
+
+You can customize the keymaps in your configuration:
+
+```lua
+require("tune").setup({
+  keymaps = {
+    n = {
+      ["<CR>"] = { ":TuneChat<CR>", "Execute TuneChat" },
+      ["<Esc>"] = { ":TuneKill<CR>", "Execute TuneKill" },
+      ["<C-c>"] = { ":TuneKill<CR>", "Execute TuneKill" },
+    },
+    i = {
+      ["<S-CR>"] = { "<Esc>:TuneChat<CR>", "Execute TuneChat in Insert Mode" },
+      ["<C-c>"] = { "<Esc>:TuneKill<CR>", "Execute TuneKill in Insert Mode" },
+    },
+  }
+})
+```
+
 
 ## Installation
-
-There are several ways to install this plugin:
 
 ### Prerequisites
 
