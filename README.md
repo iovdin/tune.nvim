@@ -2,6 +2,10 @@
 
 A Neovim plugin to chat with LLM in buffer.
 
+## Demo
+
+<img src="https://github.com/user-attachments/assets/2fb43eca-6a8c-4acd-9fee-0116e2c64a58" width="80%">
+
 ## Why tune.nvim?
 
 - **Native Editor Experience**: Chat with LLMs using your familiar text editor environment and keybindings
@@ -11,9 +15,6 @@ A Neovim plugin to chat with LLM in buffer.
 - **Flexible LLM Configuration**: Support for different LLM providers through simple configuration files
 - **Structured Chat Format**: Clear syntax for different message types (system, user, assistant, etc.)
 
-## Demo
-
-<img src="https://github.com/user-attachments/assets/2fb43eca-6a8c-4acd-9fee-0116e2c64a58" width="80%">
 
 ## Features
 
