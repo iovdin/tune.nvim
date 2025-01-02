@@ -189,15 +189,18 @@ local function tune_chat(opts, callback)
       print("stdout: " .. data)
     end
   end)
-  uv.read_start(channel, function(err, data)
+  local input_data = ""
+  uv.read_start(channel, function(err, chunk)
     assert(not err, err)
-    if data then
-      local data_lines = vim.split(data, "\n", { trimempty = true})
+    if chunk then
+      input_data = input_data .. chunk
+
+      local data_lines = vim.split(input_data, "\n", { trimempty = true})
       -- print(data)
       local success, parsed = pcall(vim.json.decode, data_lines[#data_lines])
       if success == nil then
-        print(data)
-        print(parsed)
+        print("data " .. input_data)
+        print("parsed " .. parsed)
         exit()
         return
       end
