@@ -39,44 +39,47 @@ use `c: ---` as delimiter
 
 *Variable Expansion*
 
-It is possible to use {name} for variable expansion, variables are kept in files or environment
+It is possible to use @name for variable expansion, variables are kept in files or environment
 e.g. there is a file system.txt in the folder
 ```chat
- s: {system}
+ s: @system
  u: what is a meaning of life?
 ```
-{system} will be expanded with content of system.txt
+@system will be expanded with content of system.txt
 
 Tune will read and parse .env files. Varaibles from the .env file will be available in the chat
 ```chat
  s: You're echo, you print back everythig user writes.
- u: {OPENAI_KEY}
+ u: @OPENAI_KEY
  a: <actual value of OPENAI_KEY from env or .env>
 ```
 
 it is possible to attach images to the chat using variable expansion.
 e.g. you have an image.jpg in the folder.
 ```chat
- u: what is on the picture {image}
+ u: what is on the picture @image
 ```
 
 *LLM configuration*
-It is possible to use different LLMs with tune. It can be done by providing .config.js file.
-By default Tune will look for default.config.js file in current folder. and in tune installation folder. 
+It is possible to use different LLMs with tune. It can be done by providing .llm.js file.
+By default Tune will look for default.llm.js file in current folder. and in tune installation folder. 
 Here is the one from Tune installation folder:
 ```javascript
-({
-  url: "https://api.openai.com/v1/chat/completions",
-  method: "POST",
-  headers: { 
-    "content-type": "application/json",
-    "authorization": `Bearer ${OPENAI_KEY}`
-  },
-  body: JSON.stringify({ 
-    ...payload,
-    model: "gpt-4o-mini",
-  })
-})
+module.exports = async function(payload, ctx) {
+    const key = await ctx.read("OPENAI_KEY")
+    return {
+        url: "https://api.openai.com/v1/chat/completions",
+        method: "POST",
+        headers: { 
+            "content-type": "application/json",
+            "authorization": `Bearer ${key}`
+        },
+        body: JSON.stringify({ 
+            ...payload,
+            model: "gpt-4o-mini",
+        })
+    }
+}
 ```
 It is a javascript that is given `payload` variable that contains messages/tools/streaming properties and also environment variables.
 
@@ -85,25 +88,30 @@ Last statement should be full payload object to make a http request.
 Payload format is an `openai` format. Streaming the result uses openai format too.
 So to use claude you'll have to use e.g. openrouter.ai
 
-Here is how a claude.config.js might look like:
+Here is how a claude.llm.js might look like:
 ```javascript
-({
-  url: "https://openrouter.ai/api/v1/chat/completions",
-  method: "POST",
-  headers: { 
-    "content-type": "application/json",
-    authorization: `Bearer ${OPENROUTER_KEY}` 
-  },
-  body: JSON.stringify({ 
-    ...payload
-    model: "anthropic/claude-3.5-sonnet"
-  })
-})
+
+module.exports = async function(payload, ctx) {
+    const key = await ctx.read("OPENROUTER_KEY")
+    return {
+        url: https://openrouter.ai/api/v1/chat/completions",
+        method: "POST",
+        headers: { 
+            "content-type": "application/json",
+            "authorization": `Bearer ${key}`
+        },
+        body: JSON.stringify({ 
+            ...payload,
+            model: "gpt-4o-mini",
+            model: "anthropic/claude-3.7-sonnet"
+        })
+    }
+}
 ```
 
 Use variable expansion to apply this config
 ```chat
- u: {claude} what is the meaning of life?
+ u: @claude what is the meaning of life?
 ```
 
 *Tools*
@@ -129,9 +137,9 @@ export default async function searchWeb({ query }) {
 }
 ````
 
-JSON schema is required to use the tool. It is saved into `websearch.tool` next to .mjs file.
+JSON schema is required to use the tool. It is saved into `websearch.schema.json` next to .mjs file.
 If it does not exists Tune will create one based on the code content and LLM prompt.
-here is `websearch.tool` file:
+here is `websearch.schema.json` file:
 ```json
 {
   "description": "Search the web for a specific query",
@@ -152,19 +160,17 @@ here is `websearch.tool` file:
 
 ```chat
  c: first connect the tool using variable expansion
- u: {websearch}
+ u: @websearch
 what are the latest news? 
  tc: websearch { query: "latest news" }
  c: call of the tool
- tr: {content0}
- c: if the result of the tool is a Buffer or a long text content
-Tune will create a file
+ tr: <content0>
 ```
 
 for commonjs it should be .tool.js or .tool.cjs file
 
 ```javascript
-exports.default = async function helloWorld() {
+module.exports = async function helloWorld() {
     return "Hello, World!";
 }
 ```
@@ -178,7 +184,7 @@ def main(params):
 
 here is how to use it
 ```chat
- u: {py} calculate using python 1 + 2
+ u: @py calculate using python 1 + 2
  tc: py { code: "print(1 + 2)"}
 ```
 
@@ -186,7 +192,7 @@ If code is large, it is the call become unreadable by human.
 Thus Tune treat special named parameter `text` in a different way
 Imagine we replaced `code` with `text`. Then you can use it like:
 ```chat
- u: {py} calculate using python 1 + 2
+ u: @py calculate using python 1 + 2
  tc: py
  1 + 2
 ```
@@ -206,12 +212,12 @@ e.g. lets make a tool that name file based on the content `filename.too.chat`
 ```chat
  s: You're given text content, please come up with a filename for the content.
  it should use camel case
- u: {text}
+ u: @text
 ```
 
 here is how to use it
 ```chat
- s: {filename}  
+ s: @filename
  tc: filename
  console.log("hello world")
  tr: helloWorld.js

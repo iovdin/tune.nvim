@@ -1,11 +1,4 @@
-var vars = function() {
-  var _i;
-  var names = 1 <= arguments.length ? [].slice.call(arguments, 0, _i = arguments.length - 0) : (_i = 0, []);
-  return [].concat(["do"]).concat(names.map((function(name) {
-    return ["=", name];
-  })));
-};
-var querystring, URL, $roles, vm, path, makeSchema, makeFilename, assert, util, plen, fs, row, filename, buf, split, ctx, chat2schema;
+var $roles, path, tune, makeContext, envmd, TuneError, text2run, assert, util, plen, fs, row, filename, buf, split, ctx;
 
 function _once(cond, body) {
   return new Promise((function(resolve, reject) {
@@ -23,126 +16,6 @@ function _once(cond, body) {
   }));
 }
 _once;
-querystring = require("querystring");
-URL = require("url");
-async function http(options) {
-  return (async function(transport, method, headers, url, query, p, resolve, reject, req) {
-    transport = ((((typeof options === 'undefined') || (typeof options.url === 'undefined')) || (-1 === options.url.indexOf("https://"))) ? require("http") : require("https"));
-    method = options.method || "get".toUpperCase();
-    headers = options.headers || {}
-    url = (options.url ? URL.parse(options.url) : undefined);
-    query = (options.query ? querystring.stringify(options.query) : undefined);
-    p = undefined;
-    resolve = undefined;
-    reject = undefined;
-    req = undefined;
-    p = new Promise((function(r1, r2) {
-      resolve = r1;
-      return (reject = r2);
-    }));
-    if (options.body) headers["Content-Length"] = Buffer.byteLength(options.body);
-    req = transport.request((function(it) {
-      if (options.timeout) it.timeout = options.timeout;
-      return it;
-    })({
-      hostname: (url ? url.hostname : undefined),
-      port: url.port,
-      path: (url ? url.path : "") + (query ? ("?" + query) : ""),
-      headers: headers,
-      method: method
-    }), (async function(res) {
-      var chunks, ctype, msgs, _ref;
-      if ((res.statusCode === 301)) return resolve(http(extend(options, {
-        url: res.headers.location
-      })));
-      chunks = Buffer.from([]);
-      ctype = res.headers["content-type"];
-      msgs = [];
-      if (ctype.includes("text/event-stream")) {
-        resolve((function(it) {
-          it[Symbol.asyncIterator] = it;
-          return it;
-        })({
-          next: (async function() {
-            var msg;
-            if (!msgs.length) await _once((function() {
-              return msgs.length;
-            }), (function() {
-              return undefined;
-            }));
-            msg = msgs.shift();
-            return (msg ? {
-              value: msg,
-              done: false
-            } : {
-              value: undefined,
-              done: true
-            });
-          })
-        }));
-        _ref = res.on("data", (function(data) {
-          return (function(it) {
-            it = it.toString("utf-8");
-            it = it;
-            it = it.replaceAll(/^(data:(.*)\r?\n)/gm, (function(m, p1, p2) {
-              msgs.push(((p2.trim() === "[DONE]") ? null : dJSON.parse(p2)));
-              return "";
-            }));
-            it = (chunks = Buffer.from(it, "utf8"));
-            return it;
-          })(Buffer.concat(Array(chunks, data), chunks.length + data.length));
-        }));
-      } else if (ctype === "application/x-ndjson") {
-        resolve((function(it) {
-          it[Symbol.asyncIterator] = it;
-          return it;
-        })({
-          next: (async function() {
-            if (!msgs.length) await _once((function() {
-              return msgs.length;
-            }), (function() {
-              return undefined;
-            }));
-            return msgs.shift();
-          })
-        }));
-        _ref = res.on("data", (function(data) {
-          return (function(it) {
-            it = it.toString("utf-8");
-            it = it.replaceAll(/^({.*}\r?\n)/gm, (function(m, p1) {
-              msgs.push(dJSON.parse(p1));
-              return "";
-            }));
-            it = (chunks = Buffer.from(it, "utf8"));
-            return it;
-          })(Buffer.concat(Array(chunks, data), chunks.length + data.length));
-        }));
-      } else {
-        res.on("data", (function(data) {
-          return (chunks = Buffer.concat(Array(chunks, data), chunks.length + data.length));
-        }));
-        _ref = res.on("end", (function() {
-          chunks = chunks.toString("utf8");
-          if ((ctype && (-1 !== ctype.indexOf("json")))) {
-            try {
-              chunks = JSON.parse(chunks);
-            } catch (e) {
-              return reject(e);
-            }
-          }
-          return (((res.statusCode >= 200) && (res.statusCode < 300)) ? resolve(chunks) : reject(((((typeof chunks !== "undefined") && (chunks !== null) && !Number.isNaN(chunks) && (typeof chunks.error !== "undefined") && (chunks.error !== null) && !Number.isNaN(chunks.error) && (typeof chunks.error.message !== "undefined") && (chunks.error.message !== null) && !Number.isNaN(chunks.error.message)) ? chunks.error.message : undefined) ? new Error(tpl("{type}: {message}", chunks.error)) : chunks)));
-        }));
-      }
-      return _ref;
-    }));
-    req.on("error", (function(err) {
-      return reject(err);
-    }));
-    req.end(options.body || "");
-    return p;
-  }).call(this);
-}
-http;
 
 function extend() {
   var _i;
@@ -188,544 +61,22 @@ TuneError.prototype.constructor = TuneError;
 TuneError.wrap = (function(err, filename, row, col) {
   return ((err.name === "TuneError") ? new TuneError(err.message, filename, row, col, err.stack, err.error) : new TuneError("Internal Error", filename, row, col, undefined, err));
 });
+TuneError.ctx2stack = (function(ctx) {
+  return ctx.stack.map((function(item) {
+    return {
+      filename: item.filename,
+      row: item.row,
+      col: item.col
+    }
+  }));
+});
 TuneError.prototype.toString = (function() {
-  return (this.message + "\n" + this.stack
+  return (this.message + "\n" + (this.stack || [])
     .map((function() {
       return ("    at " + arguments[0].filename + (((typeof arguments !== 'undefined') && (typeof arguments[0] !== 'undefined') && (typeof arguments[0].row !== 'undefined')) ? (":" + arguments[0].row) : "") + (((typeof arguments !== 'undefined') && (typeof arguments[0] !== 'undefined') && (typeof arguments[0].col !== 'undefined')) ? (":" + arguments[0].col) : ""));
     }))
     .join("\n") + (this.error ? (this.error.stack ? ("\n" + this.error.stack) : this.error.message) : ""));
 });
-let msgpack = (function() {
-  "use strict";
-
-  // Serializes a value to a MessagePack byte array.
-  //
-  // data: The value to serialize. This can be a scalar, array or object.
-  // options: An object that defines additional options.
-  // - multiple: (boolean) Indicates whether multiple values in data are concatenated to multiple MessagePack arrays. Default: false.
-  // - invalidTypeReplacement:
-  //   (any) The value that is used to replace values of unsupported types.
-  //   (function) A function that returns such a value, given the original value as parameter.
-  function serialize(data, options) {
-    if (options && options.multiple && !Array.isArray(data)) {
-      throw new Error("Invalid argument type: Expected an Array to serialize multiple values.");
-    }
-    const pow32 = 0x100000000; // 2^32
-    let floatBuffer, floatView;
-    let array = new Uint8Array(128);
-    let length = 0;
-    if (options && options.multiple) {
-      for (let i = 0; i < data.length; i++) {
-        append(data[i]);
-      }
-    } else {
-      append(data);
-    }
-    return array.subarray(0, length);
-
-    function append(data, isReplacement) {
-      switch (typeof data) {
-        case "undefined":
-          appendNull(data);
-          break;
-        case "boolean":
-          appendBoolean(data);
-          break;
-        case "number":
-          appendNumber(data);
-          break;
-        case "string":
-          appendString(data);
-          break;
-        case "object":
-          if (data === null)
-            appendNull(data);
-          else if (data instanceof Date)
-            appendDate(data);
-          else if (Array.isArray(data))
-            appendArray(data);
-          else if (data instanceof Uint8Array || data instanceof Uint8ClampedArray)
-            appendBinArray(data);
-          else if (data instanceof Int8Array || data instanceof Int16Array || data instanceof Uint16Array ||
-            data instanceof Int32Array || data instanceof Uint32Array ||
-            data instanceof Float32Array || data instanceof Float64Array)
-            appendArray(data);
-          else
-            appendObject(data);
-          break;
-        default:
-          if (!isReplacement && options && options.invalidTypeReplacement) {
-            if (typeof options.invalidTypeReplacement === "function")
-              append(options.invalidTypeReplacement(data), true);
-            else
-              append(options.invalidTypeReplacement, true);
-          } else {
-            throw new Error("Invalid argument type: The type '" + (typeof data) + "' cannot be serialized.");
-          }
-      }
-    }
-
-    function appendNull(data) {
-      appendByte(0xc0);
-    }
-
-    function appendBoolean(data) {
-      appendByte(data ? 0xc3 : 0xc2);
-    }
-
-    function appendNumber(data) {
-      if (isFinite(data) && Number.isSafeInteger(data)) {
-        // Integer
-        if (data >= 0 && data <= 0x7f) {
-          appendByte(data);
-        } else if (data < 0 && data >= -0x20) {
-          appendByte(data);
-        } else if (data > 0 && data <= 0xff) { // uint8
-          appendBytes([0xcc, data]);
-        } else if (data >= -0x80 && data <= 0x7f) { // int8
-          appendBytes([0xd0, data]);
-        } else if (data > 0 && data <= 0xffff) { // uint16
-          appendBytes([0xcd, data >>> 8, data]);
-        } else if (data >= -0x8000 && data <= 0x7fff) { // int16
-          appendBytes([0xd1, data >>> 8, data]);
-        } else if (data > 0 && data <= 0xffffffff) { // uint32
-          appendBytes([0xce, data >>> 24, data >>> 16, data >>> 8, data]);
-        } else if (data >= -0x80000000 && data <= 0x7fffffff) { // int32
-          appendBytes([0xd2, data >>> 24, data >>> 16, data >>> 8, data]);
-        } else if (data > 0 && data <= 0xffffffffffffffff) { // uint64
-          appendByte(0xcf);
-          appendInt64(data);
-        } else if (data >= -0x8000000000000000 && data <= 0x7fffffffffffffff) { // int64
-          appendByte(0xd3);
-          appendInt64(data);
-        } else if (data < 0) { // below int64
-          appendBytes([0xd3, 0x80, 0, 0, 0, 0, 0, 0, 0]);
-        } else { // above uint64
-          appendBytes([0xcf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
-        }
-      } else {
-        // Float
-        if (!floatView) {
-          floatBuffer = new ArrayBuffer(8);
-          floatView = new DataView(floatBuffer);
-        }
-        floatView.setFloat64(0, data);
-        appendByte(0xcb);
-        appendBytes(new Uint8Array(floatBuffer));
-      }
-    }
-
-    function appendString(data) {
-      let bytes = encodeUtf8(data);
-      let length = bytes.length;
-
-      if (length <= 0x1f)
-        appendByte(0xa0 + length);
-      else if (length <= 0xff)
-        appendBytes([0xd9, length]);
-      else if (length <= 0xffff)
-        appendBytes([0xda, length >>> 8, length]);
-      else
-        appendBytes([0xdb, length >>> 24, length >>> 16, length >>> 8, length]);
-
-      appendBytes(bytes);
-    }
-
-    function appendArray(data) {
-      let length = data.length;
-
-      if (length <= 0xf)
-        appendByte(0x90 + length);
-      else if (length <= 0xffff)
-        appendBytes([0xdc, length >>> 8, length]);
-      else
-        appendBytes([0xdd, length >>> 24, length >>> 16, length >>> 8, length]);
-
-      for (let index = 0; index < length; index++) {
-        append(data[index]);
-      }
-    }
-
-    function appendBinArray(data) {
-      let length = data.length;
-
-      if (length <= 0xff)
-        appendBytes([0xc4, length]);
-      else if (length <= 0xffff)
-        appendBytes([0xc5, length >>> 8, length]);
-      else
-        appendBytes([0xc6, length >>> 24, length >>> 16, length >>> 8, length]);
-
-      appendBytes(data);
-    }
-
-    function appendObject(data) {
-      let length = 0;
-      for (let key in data) {
-        if (data[key] !== undefined) {
-          length++;
-        }
-      }
-
-      if (length <= 0xf)
-        appendByte(0x80 + length);
-      else if (length <= 0xffff)
-        appendBytes([0xde, length >>> 8, length]);
-      else
-        appendBytes([0xdf, length >>> 24, length >>> 16, length >>> 8, length]);
-
-      for (let key in data) {
-        let value = data[key];
-        if (value !== undefined) {
-          append(key);
-          append(value);
-        }
-      }
-    }
-
-    function appendDate(data) {
-      let sec = data.getTime() / 1000;
-      if (data.getMilliseconds() === 0 && sec >= 0 && sec < 0x100000000) { // 32 bit seconds
-        appendBytes([0xd6, 0xff, sec >>> 24, sec >>> 16, sec >>> 8, sec]);
-      } else if (sec >= 0 && sec < 0x400000000) { // 30 bit nanoseconds, 34 bit seconds
-        let ns = data.getMilliseconds() * 1000000;
-        appendBytes([0xd7, 0xff, ns >>> 22, ns >>> 14, ns >>> 6, ((ns << 2) >>> 0) | (sec / pow32), sec >>> 24, sec >>> 16, sec >>> 8, sec]);
-      } else { // 32 bit nanoseconds, 64 bit seconds, negative values allowed
-        let ns = data.getMilliseconds() * 1000000;
-        appendBytes([0xc7, 12, 0xff, ns >>> 24, ns >>> 16, ns >>> 8, ns]);
-        appendInt64(sec);
-      }
-    }
-
-    function appendByte(byte) {
-      if (array.length < length + 1) {
-        let newLength = array.length * 2;
-        while (newLength < length + 1)
-          newLength *= 2;
-        let newArray = new Uint8Array(newLength);
-        newArray.set(array);
-        array = newArray;
-      }
-      array[length] = byte;
-      length++;
-    }
-
-    function appendBytes(bytes) {
-      if (array.length < length + bytes.length) {
-        let newLength = array.length * 2;
-        while (newLength < length + bytes.length)
-          newLength *= 2;
-        let newArray = new Uint8Array(newLength);
-        newArray.set(array);
-        array = newArray;
-      }
-      array.set(bytes, length);
-      length += bytes.length;
-    }
-
-    function appendInt64(value) {
-      // Split 64 bit number into two 32 bit numbers because JavaScript only regards 32 bits for
-      // bitwise operations.
-      let hi, lo;
-      if (value >= 0) {
-        // Same as uint64
-        hi = value / pow32;
-        lo = value % pow32;
-      } else {
-        // Split absolute value to high and low, then NOT and ADD(1) to restore negativity
-        value++;
-        hi = Math.abs(value) / pow32;
-        lo = Math.abs(value) % pow32;
-        hi = ~hi;
-        lo = ~lo;
-      }
-      appendBytes([hi >>> 24, hi >>> 16, hi >>> 8, hi, lo >>> 24, lo >>> 16, lo >>> 8, lo]);
-    }
-  }
-
-  // Deserializes a MessagePack byte array to a value.
-  //
-  // array: The MessagePack byte array to deserialize. This must be an Array or Uint8Array containing bytes, not a string.
-  // options: An object that defines additional options.
-  // - multiple: (boolean) Indicates whether multiple concatenated MessagePack arrays are returned as an array. Default: false.
-  function deserialize(array, options) {
-    const pow32 = 0x100000000; // 2^32
-    let pos = 0;
-    if (array instanceof ArrayBuffer) {
-      array = new Uint8Array(array);
-    }
-    if (typeof array !== "object" || typeof array.length === "undefined") {
-      throw new Error("Invalid argument type: Expected a byte array (Array or Uint8Array) to deserialize.");
-    }
-    if (!array.length) {
-      throw new Error("Invalid argument: The byte array to deserialize is empty.");
-    }
-    if (!(array instanceof Uint8Array)) {
-      array = new Uint8Array(array);
-    }
-    let data;
-    if (options && options.multiple) {
-      // Read as many messages as are available
-      data = [];
-      while (pos < array.length) {
-        data.push(read());
-      }
-    } else {
-      // Read only one message and ignore additional data
-      data = read();
-    }
-    return data;
-
-    function read() {
-      const byte = array[pos++];
-      if (byte >= 0x00 && byte <= 0x7f) return byte; // positive fixint
-      if (byte >= 0x80 && byte <= 0x8f) return readMap(byte - 0x80); // fixmap
-      if (byte >= 0x90 && byte <= 0x9f) return readArray(byte - 0x90); // fixarray
-      if (byte >= 0xa0 && byte <= 0xbf) return readStr(byte - 0xa0); // fixstr
-      if (byte === 0xc0) return null; // nil
-      if (byte === 0xc1) throw new Error("Invalid byte code 0xc1 found."); // never used
-      if (byte === 0xc2) return false; // false
-      if (byte === 0xc3) return true; // true
-      if (byte === 0xc4) return readBin(-1, 1); // bin 8
-      if (byte === 0xc5) return readBin(-1, 2); // bin 16
-      if (byte === 0xc6) return readBin(-1, 4); // bin 32
-      if (byte === 0xc7) return readExt(-1, 1); // ext 8
-      if (byte === 0xc8) return readExt(-1, 2); // ext 16
-      if (byte === 0xc9) return readExt(-1, 4); // ext 32
-      if (byte === 0xca) return readFloat(4); // float 32
-      if (byte === 0xcb) return readFloat(8); // float 64
-      if (byte === 0xcc) return readUInt(1); // uint 8
-      if (byte === 0xcd) return readUInt(2); // uint 16
-      if (byte === 0xce) return readUInt(4); // uint 32
-      if (byte === 0xcf) return readUInt(8); // uint 64
-      if (byte === 0xd0) return readInt(1); // int 8
-      if (byte === 0xd1) return readInt(2); // int 16
-      if (byte === 0xd2) return readInt(4); // int 32
-      if (byte === 0xd3) return readInt(8); // int 64
-      if (byte === 0xd4) return readExt(1); // fixext 1
-      if (byte === 0xd5) return readExt(2); // fixext 2
-      if (byte === 0xd6) return readExt(4); // fixext 4
-      if (byte === 0xd7) return readExt(8); // fixext 8
-      if (byte === 0xd8) return readExt(16); // fixext 16
-      if (byte === 0xd9) return readStr(-1, 1); // str 8
-      if (byte === 0xda) return readStr(-1, 2); // str 16
-      if (byte === 0xdb) return readStr(-1, 4); // str 32
-      if (byte === 0xdc) return readArray(-1, 2); // array 16
-      if (byte === 0xdd) return readArray(-1, 4); // array 32
-      if (byte === 0xde) return readMap(-1, 2); // map 16
-      if (byte === 0xdf) return readMap(-1, 4); // map 32
-      if (byte >= 0xe0 && byte <= 0xff) return byte - 256; // negative fixint
-      console.debug("msgpack array:", array);
-      throw new Error("Invalid byte value '" + byte + "' at index " + (pos - 1) + " in the MessagePack binary data (length " + array.length + "): Expecting a range of 0 to 255. This is not a byte array.");
-    }
-
-    function readInt(size) {
-      let value = 0;
-      let first = true;
-      while (size-- > 0) {
-        if (first) {
-          let byte = array[pos++];
-          value += byte & 0x7f;
-          if (byte & 0x80) {
-            value -= 0x80; // Treat most-significant bit as -2^i instead of 2^i
-          }
-          first = false;
-        } else {
-          value *= 256;
-          value += array[pos++];
-        }
-      }
-      return value;
-    }
-
-    function readUInt(size) {
-      let value = 0;
-      while (size-- > 0) {
-        value *= 256;
-        value += array[pos++];
-      }
-      return value;
-    }
-
-    function readFloat(size) {
-      let view = new DataView(array.buffer, pos + array.byteOffset, size);
-      pos += size;
-      if (size === 4)
-        return view.getFloat32(0, false);
-      if (size === 8)
-        return view.getFloat64(0, false);
-    }
-
-    function readBin(size, lengthSize) {
-      if (size < 0) size = readUInt(lengthSize);
-      let data = array.subarray(pos, pos + size);
-      pos += size;
-      return data;
-    }
-
-    function readMap(size, lengthSize) {
-      if (size < 0) size = readUInt(lengthSize);
-      let data = {};
-      while (size-- > 0) {
-        let key = read();
-        data[key] = read();
-      }
-      return data;
-    }
-
-    function readArray(size, lengthSize) {
-      if (size < 0) size = readUInt(lengthSize);
-      let data = [];
-      while (size-- > 0) {
-        data.push(read());
-      }
-      return data;
-    }
-
-    function readStr(size, lengthSize) {
-      if (size < 0) size = readUInt(lengthSize);
-      let start = pos;
-      pos += size;
-      return decodeUtf8(array, start, size);
-    }
-
-    function readExt(size, lengthSize) {
-      if (size < 0) size = readUInt(lengthSize);
-      let type = readUInt(1);
-      let data = readBin(size);
-      switch (type) {
-        case 255:
-          return readExtDate(data);
-      }
-      return {
-        type: type,
-        data: data
-      };
-    }
-
-    function readExtDate(data) {
-      if (data.length === 4) {
-        let sec = ((data[0] << 24) >>> 0) +
-          ((data[1] << 16) >>> 0) +
-          ((data[2] << 8) >>> 0) +
-          data[3];
-        return new Date(sec * 1000);
-      }
-      if (data.length === 8) {
-        let ns = ((data[0] << 22) >>> 0) +
-          ((data[1] << 14) >>> 0) +
-          ((data[2] << 6) >>> 0) +
-          (data[3] >>> 2);
-        let sec = ((data[3] & 0x3) * pow32) +
-          ((data[4] << 24) >>> 0) +
-          ((data[5] << 16) >>> 0) +
-          ((data[6] << 8) >>> 0) +
-          data[7];
-        return new Date(sec * 1000 + ns / 1000000);
-      }
-      if (data.length === 12) {
-        let ns = ((data[0] << 24) >>> 0) +
-          ((data[1] << 16) >>> 0) +
-          ((data[2] << 8) >>> 0) +
-          data[3];
-        pos -= 8;
-        let sec = readInt(8);
-        return new Date(sec * 1000 + ns / 1000000);
-      }
-      throw new Error("Invalid data length for a date value.");
-    }
-  }
-
-  // Encodes a string to UTF-8 bytes.
-  function encodeUtf8(str) {
-    // Prevent excessive array allocation and slicing for all 7-bit characters
-    let ascii = true,
-      length = str.length;
-    for (let x = 0; x < length; x++) {
-      if (str.charCodeAt(x) > 127) {
-        ascii = false;
-        break;
-      }
-    }
-
-    // Based on: https://gist.github.com/pascaldekloe/62546103a1576803dade9269ccf76330
-    let i = 0,
-      bytes = new Uint8Array(str.length * (ascii ? 1 : 4));
-    for (let ci = 0; ci !== length; ci++) {
-      let c = str.charCodeAt(ci);
-      if (c < 128) {
-        bytes[i++] = c;
-        continue;
-      }
-      if (c < 2048) {
-        bytes[i++] = c >> 6 | 192;
-      } else {
-        if (c > 0xd7ff && c < 0xdc00) {
-          if (++ci >= length)
-            throw new Error("UTF-8 encode: incomplete surrogate pair");
-          let c2 = str.charCodeAt(ci);
-          if (c2 < 0xdc00 || c2 > 0xdfff)
-            throw new Error("UTF-8 encode: second surrogate character 0x" + c2.toString(16) + " at index " + ci + " out of range");
-          c = 0x10000 + ((c & 0x03ff) << 10) + (c2 & 0x03ff);
-          bytes[i++] = c >> 18 | 240;
-          bytes[i++] = c >> 12 & 63 | 128;
-        } else bytes[i++] = c >> 12 | 224;
-        bytes[i++] = c >> 6 & 63 | 128;
-      }
-      bytes[i++] = c & 63 | 128;
-    }
-    return ascii ? bytes : bytes.subarray(0, i);
-  }
-
-  // Decodes a string from UTF-8 bytes.
-  function decodeUtf8(bytes, start, length) {
-    // Based on: https://gist.github.com/pascaldekloe/62546103a1576803dade9269ccf76330
-    let i = start,
-      str = "";
-    length += start;
-    while (i < length) {
-      let c = bytes[i++];
-      if (c > 127) {
-        if (c > 191 && c < 224) {
-          if (i >= length)
-            throw new Error("UTF-8 decode: incomplete 2-byte sequence");
-          c = (c & 31) << 6 | bytes[i++] & 63;
-        } else if (c > 223 && c < 240) {
-          if (i + 1 >= length)
-            throw new Error("UTF-8 decode: incomplete 3-byte sequence");
-          c = (c & 15) << 12 | (bytes[i++] & 63) << 6 | bytes[i++] & 63;
-        } else if (c > 239 && c < 248) {
-          if (i + 2 >= length)
-            throw new Error("UTF-8 decode: incomplete 4-byte sequence");
-          c = (c & 7) << 18 | (bytes[i++] & 63) << 12 | (bytes[i++] & 63) << 6 | bytes[i++] & 63;
-        } else throw new Error("UTF-8 decode: unknown multibyte start 0x" + c.toString(16) + " at index " + (i - 1));
-      }
-      if (c <= 0xffff) str += String.fromCharCode(c);
-      else if (c <= 0x10ffff) {
-        c -= 0x10000;
-        str += String.fromCharCode(c >> 10 | 0xd800)
-        str += String.fromCharCode(c & 0x3FF | 0xdc00)
-      } else throw new Error("UTF-8 decode: code point 0x" + c.toString(16) + " exceeds UTF-16 reach");
-    }
-    return str;
-  }
-
-  // The exported functions
-  return {
-    serialize: serialize,
-    deserialize: deserialize,
-
-    // Compatibility with other libraries
-    encode: serialize,
-    decode: deserialize
-  };
-
-
-})();
-
-if (typeof window !== "undefined") {
-  window.msgpack = msgpack;
-}
 var dJSON = (() => {
   var de = Object.create;
   var N = Object.defineProperty;
@@ -1434,124 +785,134 @@ var dJSON = (() => {
 /*! https://mths.be/utf8js v3.0.0 by @mathias */
 ;
 
-function pparse(filename) {
-  var parsed, parsed1;
-  var parsed;
-  var parsed1;
-  parsed = path.parse(filename);
-  parsed1 = path.parse(parsed.name);
-  if (parsed1.ext) {
-    parsed.ext2 = parsed1.ext;
-    parsed.name = parsed1.name;
-  }
-  return parsed;
+function Context() {
+  var _i;
+  var args = 1 <= arguments.length ? [].slice.call(arguments, 0, _i = arguments.length - 0) : (_i = 0, []);
+  this.ms = args.filter((function(item) {
+    return (item.name !== "write");
+  }));
+  this.ws = args.filter((function(item) {
+    return (item.name === "write");
+  }));
+  this.stack = [];
+  return this;
 }
-pparse;
-
-function makeContext(env, fs, filename, parent) {
-  var cwd, paths;
-  env = Object.assign({}, env);
-  var cwd;
-  var filename;
-  var paths;
-  cwd = (filename ? path.dirname(filename) : "");
-  filename = (filename ? filename : "");
-  paths = (function(it) {
-    var p, lenv, key, value, _i, _ref, _len, _ref0, _len0;
-    it = it.split(path.delimiter);
-    it = it.filter((function() {
-      return arguments[0];
-    }));
-    it = it.filter((function() {
-      return (arguments[0] !== cwd);
-    }));
-    if (cwd) it.unshift(cwd);
-    if (!it.length) it.unshift("/");
-    it = it;
-    it = it.reduce((function(memo, path) {
-      memo.includes(path) ? memo : memo.push(path);
-      return memo;
-    }), []);
-    it = it.reverse();
-    _ref = it;
-    for (_i = 0, _len = _ref.length; _i < _len; ++_i) {
-      p = _ref[_i];
-      var lenv;
-      lenv = path.resolve(p, ".env");
-      if ((!lenv || !fs.existsSync(lenv))) continue;
-      _ref0 = env2vars(fs.readFileSync(lenv, "utf8"));
-      for (key in _ref0) {
-        value = _ref0[key];
-        if ((key === "TUNE_PATH")) {
-          if (!it.includes(value)) it.push(value);
-        } else {
-          env[key] = value;
-        }
-      }
-    }
-    it = it.reverse();
-    return it;
-  })(env.TUNE_PATH || "");
-
-  function resolve(name) {
-    var p, fname, parsed, item, parsed1, _i, _ref, _len, _i0, _ref0, _len0;
-    if (this.env.hasOwnProperty(name)) return name;
-    _ref = paths;
-    for (_i = 0, _len = _ref.length; _i < _len; ++_i) {
-      p = _ref[_i];
-      var fname;
-      var parsed;
-      fname = path.resolve(p, name);
-      parsed = pparse(fname);
-      if (!fs.existsSync(parsed.dir)) continue;
-      _ref0 = fs.readdirSync(parsed.dir);
-      for (_i0 = 0, _len0 = _ref0.length; _i0 < _len0; ++_i0) {
-        item = _ref0[_i0];
-        var parsed1;
-        parsed1 = pparse(item);
-        if ((parsed1.name !== parsed.name)) continue;
-        if (((item === parsed.base) || !parsed.ext || (parsed1.ext2 && (parsed.base === (parsed1.name + parsed1.ext2))))) return path.resolve(parsed.dir, item);
-      }
-    }
-    if (parent) return parent.resolve(name);
-    return null;
+Context;
+Context.prototype.clone = (function() {
+  var res;
+  var res;
+  res = new Context();
+  res.ms = this.ms.concat([]);
+  res.ws = this.ws.concat([]);
+  res.stack = (this.stack || [])
+    .concat([]);
+  return res;
+});
+Context.prototype.use = (function(middleware) {
+  return ((middleware.name === "write") ? this.ws.push(middleware) : this.ms.push(middleware));
+});
+Context.prototype.resolve = (async function(name, args, ms) {
+  ms = ms || this.ms;
+  if (!ms.length) return;
+  return ms[0](name, this, args, this.resolve.bind(this, name, args, ms.slice(1)));
+});
+Context.prototype.read = (async function(name, args) {
+  var resolved, _ref;
+  var resolved;
+  resolved = await this.resolve(name);
+  if ((resolved && resolved.read)) {
+    return _ref = await resolved.read(args);
+  } else {
+    _ref = undefined;
   }
-  return (function(it) {
-    it.top = (((typeof parent !== "undefined") && (parent !== null) && !Number.isNaN(parent) && (typeof parent.top !== "undefined") && (parent.top !== null) && !Number.isNaN(parent.top)) ? parent.top : (((typeof parent !== "undefined") && (parent !== null) && !Number.isNaN(parent)) ? parent : (((typeof it !== "undefined") && (it !== null) && !Number.isNaN(it)) ? it : undefined)));
-    return it;
-  })({
-    env: env,
-    fs: fs,
-    filename: filename,
-    cwd: cwd,
-    paths: paths,
-    parent: parent,
-    resolve: resolve,
-    read: (function(filename, enc) {
-      return (this.env.hasOwnProperty(filename) ? this.env[filename] : this.fs.readFileSync(filename, enc));
-    }),
-    exists: (function(filename) {
-      return (this.env.hasOwnProperty(filename) ? true : this.fs.existsSync(filename));
-    }),
-    write: (function(filename, content) {
-      if (!fs.existsSync(path.dirname(filename))) fs.mkdirSync(path.dirname(filename), {
-        recursive: true
-      });
-      return this.fs.writeFileSync(filename, content);
-    }),
-    clone: (function(filename, newProps) {
-      return makeContext((function(it) {
-        var key, value, _ref, _len;
-        _ref = newProps;
-        for (key in _ref) {
-          value = _ref[key];
-          it[key] = value;
-        }
-        it = it;
-        return it;
-      })(Object.assign({}, this.env)), this.fs, filename, this);
-    })
+  return _ref;
+});
+Context.prototype.exec = (async function(name, args) {
+  var resolved, _ref;
+  var resolved;
+  resolved = await this.resolve(name);
+  if ((resolved && resolved.exec)) {
+    return _ref = await resolved.exec(args);
+  } else {
+    _ref = undefined;
+  }
+  return _ref;
+});
+Context.prototype.write = (async function(name, args, ws) {
+  ws = ws || this.ws;
+  if (!ws.length) return;
+  return ws[0](name, args, this, this.write.bind(this, name, args, ws.slice(1)));
+});
+
+function envmd(md) {
+  var lmd;
+  var lmd;
+  lmd = {};
+  Object.keys(md)
+    .forEach((function(name) {
+      var _ref;
+      if ((typeof md[name] === "string" || typeof md[name] === "number" || typeof md[name] === "boolean")) {
+        _ref = (lmd[name] = {
+          type: "text",
+          read: (function() {
+            return md[name];
+          })
+        });
+      } else if (typeof md[name] === "object") {
+        _ref = (lmd[name] = md[name]);
+      } else {
+        _ref = undefined;
+        throw new TuneError(("unsupported type of value '" + name + "': " + util.inspect(md)));
+      }
+      return _ref;
+    }));
+  return (async function(name, ctx, args, next) {
+    var llmd, key, val, firstKey, _ref, _len, _ref0;
+    var llmd;
+    llmd = {};
+    _ref = lmd;
+    for (key in _ref) {
+      val = _ref[key];
+      if ((args && (args === val.type))) {
+        llmd[key] = val;
+      } else if (!args) {
+        llmd[key] = val;
+      }
+    }
+    var firstKey;
+    firstKey = Object.keys(llmd)[0];
+    if ((firstKey && (name === "*"))) {
+      _ref0 = llmd[firstKey];
+    } else if (llmd.hasOwnProperty(name)) {
+      _ref0 = llmd[name];
+    } else {
+      _ref0 = next();
+    }
+    return _ref0;
   });
+}
+envmd;
+
+function makeContext() {
+  var ctx, _i;
+  var args = 1 <= arguments.length ? [].slice.call(arguments, 0, _i = arguments.length - 0) : (_i = 0, []);
+  if ((args[0] instanceof Context)) return args[0];
+  var ctx;
+  ctx = new Context();
+  if (!args[0]) return ctx;
+  args.forEach((function(md) {
+    var _ref;
+    if ((typeof md === "function")) {
+      _ref = ctx.use(md);
+    } else if (typeof md === "object") {
+      _ref = ctx.use(envmd(md));
+    } else {
+      _ref = undefined;
+      throw new TuneError("context middlewares might be either function or an object");
+    }
+    return _ref;
+  }));
+  return ctx;
 }
 makeContext;
 
@@ -1563,54 +924,34 @@ function getPos(offset, str) {
   })(str.substr(0, offset));
 }
 getPos;
-
-function env2vars(text) {
-  return text
-    .split(/^(\w+\s*=)/gm)
-    .reduce((function(memo, item, index, arr) {
-      (function(it) {
-        return (it ? memo.push({
-          name: it[1],
-          content: arr[index + 1]
-            .replace(/\n$/, "")
-        }) : undefined);
-      })(item.match(/^(\w+)\s*=/));
-      return memo;
-    }), [])
-    .reduce((function(memo, item) {
-      memo[item.name] = item
-        .content.replace(new RegExp("^\\s*'(.*)'\\s*$"), "$1")
-        .replace(new RegExp("^\\s*\"(.*)\"\\s*$"), "$1");
-      return memo;
-    }), {});
-}
-env2vars;
 $roles = {
   short2long: {
     "s": "system",
     "u": "user",
     "a": "assistant",
+    "au": "audio",
     "tc": "tool_call",
-    "v": "variable",
     "err": "error",
     "c": "comment",
-    "tr": "tool"
+    "tr": "tool_result",
+    "tool": "tool_result"
   },
   long2short: {
     "system": "s",
     "user": "u",
+    "audio": "au",
     "assistant": "a",
     "tool_call": "tc",
-    "variable": "v",
     "error": "err",
     "comment": "c",
+    "tool_result": "tr",
     "tool": "tr"
   }
 };
 
 function text2roles(text, lineNum) {
   return (function(it) {
-    it = it.split(/(^(?:s|u|a|tc|tr|c|e|v|err)\s*:)/gm);
+    it = it.split(/(^(?:s|system|u|user|a|assistant|tc|tool_call|tr|tool_result|c|comment|au|audio|err|error)\s*:)/gm);
     it = it.reduce((function(memo, item, index, arr) {
       memo.row = memo.row || 0;
       (function(it) {
@@ -1618,7 +959,7 @@ function text2roles(text, lineNum) {
         if (it) {
           var res;
           res = {
-            role: $roles.short2long[it[1]],
+            role: $roles.short2long[it[1]] || it[1],
             content: arr[index + 1]
               .replace(/\n$/, ""),
             row: memo.row,
@@ -1630,7 +971,7 @@ function text2roles(text, lineNum) {
           _ref = undefined;
         }
         return _ref;
-      })(item.match(/^(s|u|a|tc|tr|c|e|v|err)\s*:/));
+      })(item.match(/^(s|system|u|user|a|assistant|tc|tool_call|tr|tool_result|c|comment|au|audio|err|error)\s*:/));
       return memo;
     }), []);
     it = it.map((function() {
@@ -1735,7 +1076,7 @@ function text2call(text) {
   var m;
   var txt;
   lines = text.split(/\r?\n/g);
-  m = lines[0].match(/^\s*([\w\-]+)\s*({.*})?\s*$/);
+  m = lines[0].match(/^\s*([\@\w\-]+)\s*({.*})?\s*$/);
   txt = lines
     .slice(1)
     .join("\n")
@@ -1757,978 +1098,738 @@ function text2call(text) {
   }
 }
 text2call;
-
-function text2expand(text, ctx, opts) {
-  var re;
-  if ((typeof opts === 'undefined')) opts = {};
-  var re;
-  re = /{(\w+:)?([~\.\-\w\s/]+)}/g;
-
-  function skip(prefix, name) {
-    return ("{" + (prefix ? (prefix + ":") : "") + name + "}");
-  }
-  skip;
-  return (text = text.replace(re, (function(_, prefix, name, offset, str, groups) {
-    var filename, row, col, parsed, _ref, _i;
-    prefix = (prefix ? prefix.slice(0, -1) : undefined);
-    if ((prefix && (prefix !== "base64" && prefix !== "json" && prefix !== "text" && prefix !== "esc"))) return skip(prefix, name);
-    filename = ctx.resolve(name);
-    if (!filename) {
-      if (opts.skipNotFound) {
-        return skip(prefix, name);
-      } else {
-        _ref = getPos(offset, str);
-        row = _ref[0];
-        col = _ref[1];
-        throw new TuneError(("'" + name + "' not found"), ctx.filename, row, col);
+async function text2payload(text, ctx) {
+  var ast;
+  ast = await text2ast(text, ctx);
+  return await ast2payload(ast);
+}
+text2payload;
+async function text2ast(text, ctx) {
+  var lastChar, lastRole;
+  var lastChar;
+  lastChar = '';
+  var lastRole;
+  lastRole = '';
+  async function parse(text, recursive, ctx) {
+    var nodeStack, re, nodes, index, m, match, role, roleName, name, prefix, args, proc, row, col, filename, resolved, pargs, pname, p, err, schema, lctx, _ref, _i, _i0, _ref0, _len;
+    ctx = makeContext(ctx);
+    nodeStack = nodeStack || [];
+    var re;
+    re = /(?<prefix1>@{1,2})\{(?<name1>[^\}]+)\}|(?<prefix>@{1,2})(?<name>[\S]+)|(?<role>^(?:s|system|u|user|a|assistant|tc|tool_call|tr|tool_result|c|comment|au|audio|err|error))\s*(?<roleName>\([^\)]+\))?\s*:/gm;
+    var nodes;
+    nodes = [];
+    var index;
+    index = 0;
+    while (m = re.exec(text)) {
+      if (((lastRole === "a" || lastRole === "tc" || lastRole === "err" || lastRole === "assistant" || lastRole === "tool_call" || lastRole === "error") && !m.groups.role)) continue;
+      if (((m.index > 0) && (text.charAt(m.index - 1) === String.fromCharCode(92)))) continue;
+      if ((m.index - index)) {
+        nodes.push({
+          type: "text",
+          start: index,
+          end: m.index,
+          value: text.slice(index, m.index)
+        });
+        lastChar = text.charAt(m.index - 1);
+      }
+      var match;
+      match = m[0];
+      var role;
+      var roleName;
+      role = m.groups.role;
+      roleName = m.groups.roleName;
+      if (role) {
+        nodes.push({
+          type: ((lastChar === '' || lastChar === "\n") ? "role" : "text"),
+          start: index,
+          end: m.index,
+          role: role,
+          roleName: (roleName ? roleName.slice(1, -1) : undefined),
+          value: match
+        });
+        index = m.index + match.length;
+        lastChar = text.charAt(index - 1);
+        lastRole = match.slice(0, -1);
+        continue;
+      }
+      var name;
+      var prefix;
+      var args;
+      var proc;
+      name = m.groups.name || m.groups.name1;
+      prefix = m.groups.prefix || m.groups.prefix1;
+      args = undefined;
+      proc = undefined;
+      (function(it) {
+        it = it.split("|");
+        it = it.map((function(it) {
+          return it.trim();
+        }));
+        it = it.map((function(item, index) {
+          var idx;
+          if ((index === 0)) return item;
+          var idx;
+          idx = item.indexOf(" ");
+          if ((idx === -1)) return Array(item, "");
+          return Array(item.slice(0, idx), item.slice(idx));
+        }));
+        name = it[0];
+        it = (proc = ((it.length > 1) ? it.slice(1) : undefined));
+        return it;
+      })(name);
+      _ref = getPos(m.index, text);
+      row = _ref[0];
+      col = _ref[1];
+      var filename;
+      filename = (function(it) {
+        it = it["slice"](-1)[0];
+        it = (it ? (it.fullname || it.name) : "");
+        return it;
+      })(ctx.stack || []);
+      var resolved;
+      resolved = await ctx.resolve(name);
+      if (proc) {
+        while (pargs = proc.shift()) {
+          var pname;
+          pname = pargs.shift();
+          var p;
+          p = await ctx.resolve(pname);
+          if (!p) throw new TuneError(("'" + pname + "' processor not found"), filename, row, col);
+          if ((typeof p.exec !== "function")) throw new TuneError(("'" + pname + "' does not have exec function"), filename, row, col);
+          try {
+            resolved = await p.exec(resolved, pargs[0], ctx);
+          } catch (e) {
+            var err;
+            err = new TuneError(e.message, (p.fullname || p.name), undefined, undefined, [], e);
+            err.stack.push({
+              filename: filename,
+              row: row,
+              col: col
+            });
+            throw err;
+          }
+        }
+      }
+      _ref0 = (Array.isArray(resolved) ? resolved : [resolved]);
+      for (_i0 = 0, _len = _ref0.length; _i0 < _len; ++_i0) {
+        resolved = _ref0[_i0];
+        if (!resolved) throw new TuneError(("'" + name + "' not found"), filename, row, col);
+        resolved.start = m.index;
+        resolved.end = m.index + match.length;
+        resolved.stack = TuneError.ctx2stack(ctx);
+        resolved.prefix = prefix;
+        resolved.name = resolved.name || name;
+        resolved.stack.push({
+          col: col,
+          row: row,
+          filename: filename
+        });
+        if ((resolved.type === "text" || resolved.type === "image" || resolved.type === "audio")) resolved.value = await resolved.read();
+        if ((resolved.type === "tool")) {
+          var schema;
+          schema = resolved.schema;
+          if (!schema) throw new TuneError(("schema has to be set" + " for '" + resolved.name + "'"), filename, row, col);
+          schema.name = resolved.name;
+          if (!schema.description) throw new TuneError(("no description set" + " for '" + resolved.name + "'"), filename, row, col);
+          if (!schema.parameters) throw new TuneError(("no parameters set" + " for '" + resolved.name + "'"), filename, row, col);
+          if (!schema.parameters.type) throw new TuneError(("no parameters.type set" + " for '" + resolved.name + "'"), filename, row, col);
+          if (!schema.parameters.properties) throw new TuneError(("no parameters.properties set" + " for '" + resolved.name + "'"), filename, row, col);
+        }
+        index = m.index + match.length;
+        if ((recursive && (resolved.prefix.length === 2) && (resolved.type === "text"))) {
+          var lctx;
+          lctx = ctx.clone();
+          lctx.stack.push(resolved);
+          try {
+            resolved.nodes = await parse(await resolved.read(), true, lctx);
+          } catch (e) {
+            throw TuneError.wrap(e, filename, row, col);
+          }
+        }
+        nodes.push(resolved);
       }
     }
-    parsed = pparse(filename);
-    if ((prefix === "base64")) return (function(it) {
-      it = it.toString("base64");
-      return it;
-    })(ctx.read(filename));
-    if ((prefix === "json")) return JSON.stringify(ctx.read(filename, "utf8"));
-    if ((prefix === "esc")) return escape(ctx.read(filename, "utf8"));
-    if ((prefix === "text")) return ctx.read(filename, "utf8");
-    if (((parsed.ext === ".tool" || parsed.ext === ".jpg" || parsed.ext === ".png" || parsed.ext === ".webp") || (parsed.ext2 === ".tool" || parsed.ext2 === ".config") || ctx.exists(chext(filename, "tool")))) return skip(prefix, name);
-    return ctx.read(filename, "utf8");
-  })));
+    if ((text.length - index)) nodes.push({
+      type: "text",
+      start: index,
+      end: text.length,
+      value: text.slice(index, text.length)
+    });
+    return nodes;
+  }
+  parse;
+  return await parse(text, true, ctx);
 }
-text2expand;
+text2ast;
 
-function chat2expand(text, ctx, opts) {
-  if ((typeof opts === 'undefined')) opts = {};
-  return (function(it) {
-    it = text2roles(it);
-    it = it.map((function(item) {
-      if ((item.role === "system" || item.role === "user" || item.role === "tool")) item.content = text2expand(item.content, ctx, opts);
-      return item;
-    }));
-    it = roles2text(it);
-    return it;
-  })(text);
-}
-chat2expand;
+function ast2payload(ast) {
+  var payload, toolId, tools, llms, messages, roles, lastRole, lastChar;
+  var payload;
+  var toolId;
+  var tools;
+  var llms;
+  var messages;
+  var roles;
+  var lastRole;
+  var lastChar;
+  payload = {};
+  toolId = 0;
+  tools = [];
+  llms = [];
+  messages = [];
+  roles = [];
+  lastRole = undefined;
+  lastChar = '';
 
-function chext(filename, ext) {
-  return (function(parsed) {
-    parsed.ext = ext;
-    parsed.base = parsed.name + "." + ext;
-    return path.format(parsed);
-  })(pparse(filename));
-}
-chext;
-
-function text2api(text, fs, opts) {
-  if ((typeof opts === 'undefined')) opts = {};
-  return (function(payload, toolId, tools, re) {
-    function skip(prefix, name) {
-      return ("{" + (prefix ? (prefix + ":") : "") + name + "}");
+  function visit(ast) {
+    var node, _i, _res, _ref, _len, _ref0;
+    _res = [];
+    _ref = ast;
+    for (_i = 0, _len = _ref.length; _i < _len; ++_i) {
+      node = _ref[_i];
+      if ((node.type === "role")) {
+        if (lastRole) roles.push(lastRole);
+        _ref0 = (lastRole = node);
+      } else if (lastRole) {
+        lastRole.nodes = lastRole.nodes || [];
+        _ref0 = (node.nodes ? visit(node.nodes) : lastRole.nodes.push(node));
+      } else if (!!node.nodes) {
+        _ref0 = visit(node.nodes);
+      } else {
+        _ref0 = undefined;
+      }
+      if (typeof _ref0 !== 'undefined') _res.push(_ref0);
     }
-    skip;
-    payload.messages = (function(it) {
-      it = it.replace(re, (function(_, prefix, name, offset, str) {
-        var filename, parsed, schema, row, col, tool, _ref, _i;
-        prefix = (prefix ? prefix.slice(0, -1) : undefined);
-        filename = fs.resolve(name);
-        if (!filename) return skip(prefix, name);
-        parsed = pparse(filename);
-        schema = chext(filename, "tool");
-        _ref = getPos(offset, str);
-        row = _ref[0];
-        col = _ref[1];
-        if ((prefix && (prefix !== "base64" && prefix !== "json" && prefix !== "rag" && prefix !== "esc"))) throw new TuneError((prefix + " not valid prefix"), fs.filename, row, col);
-        if (fs.exists(schema)) {
-          var tool;
-          tool = fs.read(schema, "utf8");
-          try {
-            tool = dJSON.parse(fs.read(schema));
-            tool.name = parsed.name;
-            assert.ok(tool.description, "no description set");
-            assert.ok(tool.parameters, "no parameters set");
-            assert.ok(tool.parameters.type, "no parameters.type set");
-            assert.ok(tool.parameters.properties, "no parameters.properties set");
-          } catch (e) {
-            throw TuneError.wrap(e, schema);
-          }
-          tools.push({
-            type: "function",
-            function: tool
-          });
-          return "";
-        } else if (prefix === "tool") {
-          throw new TuneError(("schema not found for " + name), fs.filename, row, col);
-        }
-        if ((parsed.ext2 === ".config")) {
-          payload.config = filename;
-          return "";
-        }
-        return skip(prefix, name);
-      }));
-      it = text2roles(it);
-      it = it.filter((function(msg) {
-        return (msg.role === "system" || msg.role === "user" || msg.role === "assistant" || msg.role === "tool" || msg.role === "tool_call");
-      }));
+    return _res;
+  }
+  visit;
+  visit(ast);
+  roles.push(lastRole);
 
-      function transformRoles(memo, item, index, arr) {
-        var tcItem, toolIndex, tc, images, split;
-        if ((item.role === "system" || item.role === "user" || item.role === "tool")) item.content = unescape(item.content);
+  function transformRoles(memo, item, index, arr) {
+    var tcItem, lines, toolIndex, tc;
+    if ((item.role === "user" || item.role === "system" || item.role === "tool_call")) item.content = (Array.isArray(item.content) ? item.content.map((function(item) {
+      if (item.text) item.text = unescape(item.text);
+      return item;
+    })) : unescape(item.content));
 
-        function findToolCalls() {
-          var item1, _i, _ref, _len;
-          _ref = memo
-            .slice()
-            .reverse();
-          for (_i = 0, _len = _ref.length; _i < _len; ++_i) {
-            item1 = _ref[_i];
-            if (item1.tool_calls) return item1;
-            if ((item1.role === "user" || item1.role === "assistant")) return;
-          }
-          return null;
+    function findToolCalls() {
+      var item1, _i, _ref, _len;
+      var tools;
+      tools = [];
+      _ref = memo
+        .slice()
+        .reverse();
+      for (_i = 0, _len = _ref.length; _i < _len; ++_i) {
+        item1 = _ref[_i];
+        if ((item1.role === "tool")) tools.push(item1);
+        if ((!!item1.tool_calls && !!tools.length && (tools.length === item1.tool_calls.length))) return;
+        if (item1.tool_calls) return item1;
+        if ((item1.role === "user" || item1.role === "assistant")) return;
+      }
+      return null;
+    }
+    findToolCalls;
+    if ((item.role === "tool_call")) {
+      tcItem = findToolCalls();
+      if (!tcItem) {
+        tcItem = {
+          role: "assistant",
+          content: null,
+          tool_calls: Array()
+        };
+        memo.push(tcItem);
+      }
+      tcItem.tool_calls.push({
+        id: String(toolId++),
+        type: "function",
+        "function": text2call(item.content)
+      });
+    } else if (item.role === "audio") {
+      var lines;
+      lines = item.content.split("\n");
+      memo.push({
+        role: "assistant",
+        content: null,
+        audio: {
+          id: item.id,
+          data: item.data,
+          expires_at: (function(it) {
+            it = it.trim();
+            it = parseInt(it);
+            return it;
+          })(lines[0]),
+          transcript: lines.slice(1)
+            .join("\n")
         }
-        findToolCalls;
-        if ((item.role === "tool_call")) {
-          tcItem = findToolCalls();
-          if (!tcItem) {
-            tcItem = {
-              role: "assistant",
-              content: null,
-              tool_calls: Array()
-            };
-            memo.push(tcItem);
-          }
-          tcItem.tool_calls.push({
-            id: String(toolId++),
-            type: "function",
-            "function": text2call(item.content)
-          });
-        } else if (item.role === "tool") {
-          tcItem = findToolCalls();
-          if (!tcItem) throw "No tool_calls found for item.role 'tool'";
-          toolIndex = memo.slice(memo.indexOf(tcItem))
-            .reverse()
-            .reduce((function(memo, item) {
-              return ((item.role === "tool") ? (memo + 1) : memo);
-            }), 0);
-          tc = tcItem.tool_calls[toolIndex];
-          item.tool_call_id = tc.id;
-          item.name = tc.function.name;
-          memo.push(item);
-        } else if (item.role === "user") {
-          var images;
-          var split;
-          images = [];
-          split = "<split-string-#sdf12kdf2>";
-
-          function replaceImage(_, prefix, name) {
-            var filename, parsed, _ref;
-            var filename;
-            filename = fs.resolve(name);
-            if (!filename) return skip(prefix, name);
-            var parsed;
-            var prefix;
-            parsed = path.parse(filename);
-            prefix = (prefix ? prefix.slice(0, -1) : undefined);
-            if (((prefix === "image") || (parsed.ext === ".jpg" || parsed.ext === ".png" || parsed.ext === ".webp"))) {
-              images.push(filename);
-              return _ref = split;
-            } else {
-              return _ref = skip(prefix, name);
-            }
-            return _ref;
-          }
-          item.content = item.content.replace(re, replaceImage);
-          if (images.length) item.content = item.content
-            .split(split)
-            .reduce((function(m, item, index) {
-              if (item.trim()) m.push({
-                type: "text",
-                text: item
-              });
-              (function(it) {
-                return (it ? (function(ext, mimetype, base64) {
-                  var _ref;
-                  ext = path.parse(it).ext;
-                  switch (ext) {
-                    case ".jpg":
-                      _ref = "image/jpeg";
-                      break;
-                    case ".png":
-                      _ref = "image/png";
-                      break;
-                    case ".webp":
-                      _ref = "image/webp";
-                      break;
-                    default:
-                      _ref = undefined;
-                  }
-                  mimetype = _ref;
-                  base64 = fs.read(it)
-                    .toString("base64");
-                  return m.push({
-                    type: "image_url",
-                    image_url: {
-                      url: "data:" + mimetype + ";base64," + base64
-                    }
-                  });
-                })() : undefined);
-              })(images[index]);
-              return m;
-            }), []);
-          memo.push(item);
+      });
+    } else if (item.role === "tool") {
+      tcItem = findToolCalls();
+      if (!tcItem) throw "No tool_calls found for item.role 'tool'";
+      toolIndex = memo.slice(memo.indexOf(tcItem))
+        .reverse()
+        .reduce((function(memo, item) {
+          return ((item.role === "tool") ? (memo + 1) : memo);
+        }), 0);
+      tc = tcItem.tool_calls[toolIndex];
+      item.tool_call_id = tc.id;
+      item.name = tc.function.name;
+      memo.push(item);
+    } else {
+      memo.push(item);
+    }
+    return memo;
+  }
+  payload.messages = roles
+    .map((function(item) {
+      var res, _ref;
+      var res;
+      switch (item.role) {
+        case "s":
+          _ref = "system";
+          break;
+        case "u":
+          _ref = "user";
+          break;
+        case "a":
+          _ref = "assistant";
+          break;
+        case "au":
+          _ref = "audio";
+          break;
+        case "tc":
+          _ref = "tool_call";
+          break;
+        case "err":
+          _ref = "error";
+          break;
+        case "c":
+          _ref = "comment";
+          break;
+        case "tr":
+          _ref = "tool";
+          break;
+        case "tool":
+          _ref = "tool";
+          break;
+        case "tool_result":
+          _ref = "tool";
+          break;
+        default:
+          _ref = item.role;
+      }
+      res = {
+        role: _ref,
+        nodes: item.nodes
+      };
+      if (item.roleName) res.name = item.roleName;
+      return res;
+    }))
+    .map((function(item) {
+      item.nodes = item.nodes.reduce((function(memo, node) {
+        if ((node.type === "llm")) {
+          llms.push(node);
+        } else if (node.type === "tool") {
+          tools.push(node);
         } else {
-          memo.push(item);
+          memo.push(node);
         }
         return memo;
-      }
-      it = it.reduce(transformRoles, Array());
-      return it;
-    })(chat2expand(text, fs, opts));
-    if (tools.length) payload.tools = tools;
-    return payload;
-  })({}, 0, [], /{(\w+:)?([~\.\-\w\s/]+)}/g);
-}
-text2api;
-vm = require("vm");
-
-function payload2api(payload, ctx) {
-  var configFile, config;
-  var configFile;
-  var config;
-  configFile = payload.config;
-  config = undefined;
-  if (!configFile) configFile = ctx.resolve("default.config");
-  if (!configFile) throw new TuneError("default.config.js file not found", ctx.filename);
-  var config;
-  config = ctx.read(configFile, "utf8");
-  delete payload.config;
-  ctx = ctx.clone(configFile, {
-    payload: payload
-  });
-  try {
-    config = vm.runInNewContext(config, Object.assign({}, ctx.env), {
-      filename: configFile
-    });
-  } catch (e) {
-    throw TuneError.wrap(e, ctx.filename);
-  }
-  return config;
-}
-payload2api;
-
-function openai2claude(payload) {
-  var msg, item, _i, _ref, _len, _i0, _res, _ref0, _len0, _ref1;
-  _ref = payload.messages;
-  for (_i = 0, _len = _ref.length; _i < _len; ++_i) {
-    msg = _ref[_i];
-    if (Array.isArray(msg.content)) {
-      _res = [];
-      _ref0 = msg.content;
-      for (_i0 = 0, _len0 = _ref0.length; _i0 < _len0; ++_i0) {
-        item = _ref0[_i0];
-        switch (item.type) {
-          case "image_url":
-            _ref1 = {
-              type: "image",
-              source: (function(it) {
-                it.media_type = item.image_url.url.substring(5, item.image_url.url.indexOf(";base64,"));
-                it.data = item.image_url.url.substring(8 + item.image_url.url.indexOf(";base64,"));
-                return it;
-              })({
-                type: "base64"
-              })
+      }), []);
+      return item;
+    }))
+    .map((function(item) {
+      item.content = item.nodes.reduce((function(memo, node) {
+        var lastNode, _ref;
+        if ((node.type === "image")) {
+          if ((typeof memo === "string")) memo = Array({
+            type: "text",
+            text: memo
+          });
+          memo.push({
+            type: "image_url",
+            image_url: {
+              url: "data:" + node.mimetype + ";base64," + node.value.toString("base64")
             }
-            break;
-          default:
-            _ref1 = item;
+          });
+        } else if ((item.role === "user") && (node.type === "audio")) {
+          if ((typeof memo === "string")) memo = Array({
+            type: "text",
+            text: memo
+          });
+          switch (node.mimetype) {
+            case "audio/mpeg":
+              _ref = "mp3";
+              break;
+            case "audio/wav":
+              _ref = "wav";
+              break;
+            default:
+              _ref = undefined;
+          }
+          memo.push({
+            type: "input_audio",
+            input_audio: {
+              data: node.value.toString("base64"),
+              format: _ref
+            }
+          });
+        } else if ((item.role === "audio") && (node.type === "audio")) {
+          item.id = node.name;
+          item.data = node.value.toString("base64");
+        } else if (node.type === "var" || node.type === "text") {
+          if ((typeof memo === "string")) {
+            memo += node.value;
+          } else {
+            var lastNode;
+            lastNode = memo["slice"](-1)[0];
+            (lastNode.type === "text") ? lastNode.text += node.value: memo.push({
+              type: "text",
+              text: node.value
+            });
+          }
         }
-        if (typeof _ref1 !== 'undefined') _res.push(_ref1);
-      }
-      msg.content = _res;
-    }
-  }(function(it) {
-    var _ref2;
-    it = it.filter((function(item) {
-      return (item.role === "system");
-    }));
-    it = it.map((function() {
-      return arguments[0].content;
-    }));
-    if (it.length) {
-      payload.system = it.join("\n");
-      _ref2 = (payload.messages = payload.messages.filter((function(item) {
-        return (item.role !== "system");
+        return memo;
+      }), "");
+      delete item.nodes;
+      item.content = ((typeof item.content === "string") ? item.content.trim() : item.content.map((function(content) {
+        if ((content.type === "text")) content.text = content.text.trim();
+        return content;
       })));
-    } else {
-      _ref2 = undefined;
-    }
-    it = _ref2;
-    return it;
-  })(payload.messages);
-  payload.messages = (function(it) {
-    var _i1, _res0, _ref2, _len1, _ref3;
-    _res0 = [];
-    _ref2 = it;
-    for (_i1 = 0, _len1 = _ref2.length; _i1 < _len1; ++_i1) {
-      msg = _ref2[_i1];
-      if (msg.tool_calls) {
-        msg.content = (function(it) {
-          it = it.concat(msg.tool_calls.map((function(tc) {
-            return {
-              type: "tool_use",
-              id: tc.id,
-              name: tc.function.name,
-              input: JSON.parse(tc.function.arguments)
-            }
-          })));
-          return it;
-        })((msg.content ? Array({
-          type: "text",
-          text: msg.content
-        }) : []));
-        delete msg.tool_calls;
-        _ref3 = msg;
-      } else if (msg.role === "tool") {
-        _ref3 = {
-          role: "user",
-          content: Array({
-            type: "tool_result",
-            tool_use_id: msg.tool_call_id,
-            content: msg.content
-          })
-        }
-      } else {
-        _ref3 = msg;
-      }
-      if (typeof _ref3 !== 'undefined') _res0.push(_ref3);
-    }
-    it = _res0;
-    it = it.reduce((function(memo, msg, index) {
-      var lastMsg;
-      lastMsg = memo["slice"](-1)[0];
-      if ((!lastMsg || (lastMsg.role !== msg.role))) return memo.concat(Array(msg));
-      if (!Array.isArray(lastMsg.content)) lastMsg.content = Array({
-        type: "text",
-        text: lastMsg.content
-      });
-      if (!Array.isArray(msg.content)) msg.content = Array({
-        type: "text",
-        text: msg.content
-      });
-      lastMsg.content = lastMsg.content.concat(msg.content);
-      return memo;
-    }), []);
-    return it;
-  })(payload.messages);
-  if (payload.tools) payload.tools = payload.tools.map((function(tool) {
-    return (function(it) {
-      it.input_schema = it.parameters;
-      delete it.parameters;
-      return it;
-    })(tool.function);
-  }));
+      return item;
+    }))
+    .reduce(transformRoles, Array());
+  if (tools.length) payload.tools = tools;
+  if (llms.length) payload.llm = llms["slice"](-1)[0];
   return payload;
 }
-openai2claude;
-async function toolCall(text, tools, ctx, res, finish) {
-  finish = false;
-  res = await Promise.all(text2roles(text, true)
-    .reduce((function(memo, item, index, arr) {
-      if (finish) return memo;
-      item = arr[arr.length - index - 1];
-      (item.role === "tool_call") ? memo.push(item): finish = true;
+ast2payload;
+async function payload2http(payload, ctx) {
+  var llm, stack, lastStack, body, _ref;
+  ctx = makeContext(ctx);
+  var llm;
+  llm = payload.llm;
+  delete payload.llm;
+  if (!llm) llm = await ctx.resolve("*", "llm");
+  if (!llm) {
+    var stack;
+    stack = TuneError.ctx2stack(ctx);
+    var lastStack;
+    lastStack = stack.pop();
+    throw new TuneError("llm file not found", (((typeof lastStack !== "undefined") && (lastStack !== null) && !Number.isNaN(lastStack) && (typeof lastStack.filename !== "undefined") && (lastStack.filename !== null) && !Number.isNaN(lastStack.filename)) ? lastStack.filename : undefined), (((typeof lastStack !== "undefined") && (lastStack !== null) && !Number.isNaN(lastStack) && (typeof lastStack.row !== "undefined") && (lastStack.row !== null) && !Number.isNaN(lastStack.row)) ? lastStack.row : undefined), (((typeof lastStack !== "undefined") && (lastStack !== null) && !Number.isNaN(lastStack) && (typeof lastStack.col !== "undefined") && (lastStack.col !== null) && !Number.isNaN(lastStack.col)) ? lastStack.col : undefined), stack);
+  }
+  var body;
+  body = Object.assign({}, payload);
+  if (body.tools) body.tools = body.tools.map((function(tool) {
+    return {
+      type: "function",
+      function: Object.assign({}, tool.schema)
+    }
+  }));
+  try {
+    _ref = await llm.exec(body, ctx);
+  } catch (e) {
+    throw new TuneError(e.message, (llm.filename || llm.fullname || llm.name), llm.row, llm.col, llm.stack, e);
+  }
+  return _ref;
+}
+payload2http;
+async function toolCall(payload, ctx) {
+  var lastMsg, tools;
+  var lastMsg;
+  lastMsg = payload.messages["slice"](-1)[0];
+  if (((((typeof lastMsg !== "undefined") && (lastMsg !== null) && !Number.isNaN(lastMsg) && (typeof lastMsg.tool_calls !== "undefined") && (lastMsg.tool_calls !== null) && !Number.isNaN(lastMsg.tool_calls) && (typeof lastMsg.tool_calls.length !== "undefined") && (lastMsg.tool_calls.length !== null) && !Number.isNaN(lastMsg.tool_calls.length)) ? lastMsg.tool_calls.length : (((typeof 0 !== "undefined") && (0 !== null) && !Number.isNaN(0)) ? 0 : undefined)) === 0)) return [];
+  ctx = makeContext(ctx);
+  var tools;
+  tools = (payload.tools || [])
+    .reduce((function(memo, tool) {
+      memo[tool.name] = tool;
       return memo;
-    }), [])
-    .map((async function(item) {
-      var tc;
-      var res;
-      res;
-      try {
-        tc = text2call(item.content);
-      } catch (e) {
-        throw TuneError.wrap(e, ctx.filename, item.row, item.col);
+    }), {});
+  return Promise.all(lastMsg.tool_calls.map((async function(item) {
+    var res, tc, tool;
+    var res;
+    res;
+    var tc;
+    tc = item.function;
+    var tool;
+    tool = tools[tc.name];
+    if (!tool) throw new TuneError(("tool '" + tc.name + "' not defined"), "", undefined, undefined, TuneError.ctx2stack(ctx));
+    try {
+      res = await tools[tc.name].exec(JSON.parse(tc.arguments), ctx);
+    } catch (e) {
+      throw new TuneError(e.message, (tool.filename || tool.fullname || tool.name), tool.row, tool.col, tool.stack, e);
+    }
+
+    function transformRes(res) {
+      var _ref;
+      if (((typeof res === "string" || typeof res === "number" || typeof res === "boolean" || typeof res === "undefined") || (res instanceof String) || (res === null))) {
+        _ref = String(res);
+      } else if (Array.isArray(res)) {
+        _ref = res
+          .map(transformRes)
+          .join("\n");
+      } else if (typeof util !== 'undefined') {
+        _ref = util.inspect(res);
+      } else if (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.toString !== "undefined") && (res.toString !== null) && !Number.isNaN(res.toString)) ? res.toString : undefined) {
+        _ref = res.toString();
+      } else {
+        _ref = String(res);
       }
-      if (!tools[tc.name]) throw new TuneError(("tool '" + tc.name + "' not found"), ctx.filename, item.row, item.col);
-      res = await tools[tc.name](JSON.parse(tc.arguments), ctx);
-      async function transformRes(res) {
-        var i, fname, tofile, filest, parsed, _ref;
-        var i;
-        i = 0;
-        var fname;
-        fname;
-        var tofile;
-        tofile = false;
-        if (Buffer.isBuffer(res)) {
-          tofile = true;
-        } else if ((typeof res === "string" || typeof res === "number" || typeof res === "boolean" || typeof res === "undefined") || (res instanceof String) || (res === null)) {
-          res = String(res);
-        } else if (Array.isArray(res)) {
-          res = await Promise.all(res.map(transformRes));
-          res = res.join("\n");
-        } else {
-          res = util.inspect(res);
-        }
-        if (tofile) {
-          filest = ctx.resolve(".filest");
-          fname = await (async function(it) {
-            it = ((typeof makeFilename !== 'undefined') ? await makeFilename(extend(tc, {
-              result: res
-                .slice(0, 100)
-                .toString("utf8"),
-              result_hex: res
-                .slice(0, 100)
-                .toString("hex"),
-              conventions: (filest ? ctx.read(filest, "utf8") : "no conventions"),
-              contextFilename: ctx.top.filename
-            }), ctx) : JSON.stringify({
-              filename: "content"
-            }));
-            it = JSON.parse(it);
-            it = it.filename.trim();
-            return it;
-          }).call(this);
-          parsed = path.parse(fname);
-          while (ctx.resolve(fname)) {
-            fname = path.join(parsed.dir, parsed.name + i + parsed.ext);
-            i += 1;
-          }
-          ctx.write(path.resolve(ctx.top.cwd, fname), res);
-          parsed = path.parse(fname);
-          _ref = ("{" + path.join(parsed.dir, parsed.name) + "}");
-        } else {
-          _ref = res;
-        }
-        return _ref;
-      }
-      transformRes;
-      return transformRes(res);
-    })));
-  return res.reverse()
-    .map((function(item) {
-      return ("tr: " + item);
-    }))
-    .join("\n");
+      return _ref;
+    }
+    transformRes;
+    return {
+      role: "tool",
+      id: item.id,
+      content: transformRes(res)
+    }
+  })));
 }
 toolCall;
 
-function makeTool(filename, ctx) {
-  var parsed, tool, text, it, spawnSync, _ref;
-  var parsed;
-  var tool;
-  parsed = pparse(filename);
-  tool = undefined;
-  ctx = ctx.clone(filename);
-  try {
-    if ((parsed.ext === ".chat")) {
-      var text;
-      text = chat2expand(ctx.read(filename, "utf8"), ctx, {
-        skipNotFound: true
-      });
-      it = text2roles(text);
-      it = it.filter((function() {
-        return (arguments[0].role === "system" || arguments[0].role === "user" || arguments[0].role === "assistant");
-      }));
-      it = (((it.length === 0) || ("user" !== it["slice"](-1)[0].role)) ? (text += "\nu: {text}") : undefined);
-      _ref = tool = (async function(args, ictx) {
-        var res;
-        var res;
-        res = await text2run(text, ctx.clone(filename, args), true);
-        res = text2roles(res);
-        return res["slice"](-1)[0].content;
-      });
-    } else if (parsed.ext === ".mjs") {
-      _ref = tool = (async function(args, ictx) {
-        var module;
-        var module;
-        module = await import(filename + "?t=" + Date.now());
-        return module.default.apply(ctx, [args, ctx]);
-      });
-    } else if (parsed.ext === ".js" || parsed.ext === ".cjs") {
-      _ref = tool = (function(args, ictx) {
-        var module;
-        var module;
-        module = require(filename);
-        return module.default.apply(ctx, [args, ctx]);
-      });
-    } else if (parsed.ext === ".py" || parsed.ext === ".php") {
-      var spawnSync;
-      spawnSync = require("child_process").spawnSync;
-      _ref = tool = (async function(args, ictx) {
-        var res, result, sres, _ref0, _ref1, _ref2, _err;
-        var res;
-        switch (parsed.ext) {
-          case ".py":
-            _ref0 = "python";
-            break;
-          case ".php":
-            _ref0 = "php";
-            break;
-          default:
-            _ref0 = undefined;
-        }
-        switch (parsed.ext) {
-          case ".py":
-            _ref1 = "run.py";
-            break;
-          case ".php":
-            _ref1 = "run.php";
-            break;
-          default:
-            _ref1 = undefined;
-        }
-        res = spawnSync(_ref0, Array(path.resolve(__dirname, _ref1)), {
-          input: JSON.stringify({
-            filename: filename,
-            arguments: args,
-            ctx: ""
-          }),
-          env: extend(process.env, ctx.env)
-        });
-        if (res.error) throw res.error;
-        var result;
-        result = Array();
-        if (res.stderr.length) result.push(res.stderr.toString("utf8"));
-        if (res.stdout.length) {
-          var sres;
-          try {
-            _ref2 = msgpack.deserialize(Buffer.from(res.stdout.toString("utf8"), "hex"));
-          } catch (_err) {
-            _ref2 = res.stdout.toString("utf8");
-          }
-          sres = _ref2;
-          Array.isArray(sres) ? result = result.concat(sres) : result.push(sres);
-        }
-        if ((result.length === 1)) result = result[0];
-        return result;
-      });
-    } else {
-      _ref = undefined;
-    }
-    _ref;
-  } catch (e) {
-    throw TuneError.wrap(e, filename);
+function TunePromise(executor, iterator) {
+  this.promise = new Promise(executor);
+  if (iterator) {
+    this.next = iterator;
+    this[Symbol.asyncIterator] = this;
   }
-  if (!tool) throw new TuneError(("cant make tool out of " + parsed.ext + " only .mjs .js .cjs .py .chat .php extensios are supported" + filename));
-  return (async function(args, ictx) {
-    var _ref0;
-    try {
-      _ref0 = await tool(args, ictx);
-    } catch (e) {
-      throw TuneError.wrap(e, filename);
-    }
-    return _ref0;
-  });
+  return this;
 }
-makeTool;
-path = require("path");
-try {
-  makeSchema = (function(it) {
-    return (it ? makeTool(it, makeContext(process.env, require("fs"), __filename)) : undefined);
-  })(path.resolve(__dirname, "schema.tool.chat"));
-  makeFilename = (function(it) {
-    return (it ? makeTool(it, makeContext(process.env, require("fs"), __filename)) : undefined);
-  })(path.resolve(__dirname, "filename.tool.chat"));
-} catch (e) {
-  console.log(e.toString());
-}
-async function text2run(text, ctx, multiTurn) {
-  var re, tools, executeLoop, result, payload, configFile, config, logDir, logFile, parsed, res;
-  if (!ctx) throw Error("no context specified");
-  re = /{(\w+:)?([~\.\-\w\s/]+)}/g;
-  tools = {};
-  executeLoop = true;
-  vars = [];
-  result = "";
-  (function(it) {
-    it = text2roles(it);
-    it = it.map((function(item) {
-      if ((item.role === "system" || item.role === "user" || item.role === "tool")) item.content.replace(re, (function(_, prefix, name, offset, str) {
-        var row, col, _ref, _i;
-        _ref = getPos(offset, str);
-        row = _ref[0];
-        col = _ref[1];
-        return vars.push(Array((prefix ? prefix.slice(0, -1) : undefined), name, row, col));
-      }));
-      return item;
-    }));
-    return it;
-  })(text);
-  await _afor((function(arr, idx) {
-    arr = vars;
-    idx = 0;
-    return (function(res) {
-      var _ref;
-      if ((idx < arr.length)) {
-        res = Array(arr[idx], idx);
-        idx++;
-        _ref = res;
-      } else {
-        _ref = undefined;
-      }
-      return _ref;
-    });
-  }), (async function(item, i) {
-    var name, prefix, filename, parsed, schema, schemaExists, body, _ref, _ref0;
-    try {
-      var name;
-      var prefix;
-      var filename;
-      name = item[1];
-      prefix = item[0];
-      filename = ctx.resolve(name);
-      if (!filename) throw new TuneError(("'" + name + "' not found"), ctx.filename, item[2], item[3]);
-      var parsed;
-      var schema;
-      var schemaExists;
-      parsed = pparse(filename);
-      schema = chext(filename, "tool");
-      schemaExists = ctx.exists(schema);
-      if ((schemaExists || (parsed.ext2 === ".tool"))) {
-        filename = ["mjs", "js", "chat", "py", "cjs", ".php"]
-          .map((function() {
-            return chext(filename, "tool." + arguments[0]);
-          }))
-          .find((function() {
-            return ctx.exists(arguments[0]);
-          }));
-        if (!filename) throw new TuneError(("tool " + name + ".js/cjs/mjs/chat/py/php not found"), ctx.filename, item[2], item[3]);
-        if (!schemaExists) {
-          if ((typeof makeSchema !== 'undefined')) {
-            body = await makeSchema({
-              text: ctx.read(filename, "utf8")
-            }, ctx);
-            ctx.write(schema, body);
-          } else {
-            throw new TuneError(("tool schema for " + name + " not found"), ctx.filename, item[2], item[3]);
-          }
-        }
-        _ref = tools[pparse(filename).name] = makeTool(filename, ctx);
-      } else {
-        _ref = undefined;
-      }
-      _ref0 = _ref;
-    } catch (e) {
-      throw TuneError.wrap(e, ctx.filename, item[2], item[3]);
-    }
-    return _ref0;
+TunePromise;
+TunePromise.prototype.then = (function(onFulfilled, onRejected) {
+  return this.promise.then(onFulfilled, onRejected);
+});
+TunePromise.prototype.catch = (function(onRejected) {
+  return this.promise.catch(onRejected);
+});
+TunePromise.prototype.finally = (function(onFinally) {
+  return this.promise.finally(onFinally);
+});
+
+function text2run(text, ctx, opts) {
+  var msgs, stopVal, stream, ires, ierr, ifinish, resolve, reject, p;
+  if (!ctx) throw Error("context not set");
+  ctx = makeContext(ctx);
+  var msgs;
+  var stopVal;
+  var stream;
+  var ires;
+  var ierr;
+  var ifinish;
+  var resolve;
+  var reject;
+  msgs = [];
+  stopVal = (((typeof opts !== "undefined") && (opts !== null) && !Number.isNaN(opts) && (typeof opts.stop !== "undefined") && (opts.stop !== null) && !Number.isNaN(opts.stop)) ? opts.stop : (((typeof "step" !== "undefined") && ("step" !== null) && !Number.isNaN("step")) ? "step" : undefined));
+  stream = (((typeof opts !== "undefined") && (opts !== null) && !Number.isNaN(opts) && (typeof opts.stream !== "undefined") && (opts.stream !== null) && !Number.isNaN(opts.stream)) ? opts.stream : (((typeof false !== "undefined") && (false !== null) && !Number.isNaN(false)) ? false : undefined));
+  ires = undefined;
+  ierr = undefined;
+  ifinish = false;
+  resolve = undefined;
+  reject = undefined;
+  var p;
+  p = new Promise((function(res, rej) {
+    resolve = res;
+    return (reject = rej);
   }));
-  (function(it) {
-    var _ref;
-    if (it) {
-      result += ("\n" + it);
-      _ref = (!multiTurn ? (executeLoop = false) : undefined);
+  if (stream) p = new TunePromise((function(res, rej) {
+    resolve = res;
+    return (reject = rej);
+  }), (async function() {
+    var val;
+    await _once((function() {
+      return (!!ires || !!ierr || !!ifinish);
+    }), (function() {
+      return undefined;
+    }));
+    if (ierr) throw ierr;
+    if (ires) {
+      var val;
+      val = ires;
+      ires = undefined;
+      return val;
+    }
+    return ifinish;
+  }));
+
+  function stop() {
+    var lastMsg, _ref;
+    var lastMsg;
+    lastMsg = msgs["slice"](-1)[0];
+    if ((stopVal === "step")) {
+      _ref = !!lastMsg;
+    } else if (stopVal === "assistant") {
+      _ref = (!!lastMsg && (lastMsg.role === "assistant") && !!lastMsg.content && !lastMsg.tool_calls);
+    } else if (typeof stopVal === "function") {
+      _ref = stopVal(msgs);
     } else {
       _ref = undefined;
     }
     return _ref;
-  })(await toolCall(text, tools, ctx));
-  while (executeLoop) {
-    executeLoop = false;
-    payload = text2api(text + result, ctx);
-    configFile = ctx.resolve(payload.config || "default.config");
-    config = payload2api(payload, ctx);
-    logDir = ctx.resolve("TUNE_LOG");
-    logFile = undefined;
-    if ((logDir && ctx.filename)) {
-      var parsed;
-      parsed = path.parse(ctx.filename);
-      logFile = path.resolve(ctx.read(logDir), parsed.base + "_payload_" + new Date()
-        .getTime() + ".json");
-      ctx.write(logFile, JSON.stringify(config, null, "  "));
-    }
-    try {
-      res = await http(config);
-      if ((((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : undefined)) throw new TuneError(tpl("{type: }{message}", res.error), configFile, undefined, undefined, (logFile ? [{
-        filename: logFile
-      }] : undefined));
-      res = (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.choices !== "undefined") && (res.choices !== null) && !Number.isNaN(res.choices) && (typeof res.choices[0] !== "undefined") && (res.choices[0] !== null) && !Number.isNaN(res.choices[0]) && (typeof res.choices[0].message !== "undefined") && (res.choices[0].message !== null) && !Number.isNaN(res.choices[0].message)) ? res.choices[0].message : (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res)) ? res : undefined));
-    } catch (e) {
-      throw TuneError.wrap(e, ctx.filename);
-    }
-    res = msg2text(res);
-    result += ("\n" + res);
-    if (multiTurn)(function(it) {
-      var _ref;
-      if (it) {
-        executeLoop = true;
-        _ref = (result += ("\n" + it));
-      } else {
-        _ref = undefined;
-      }
-      return _ref;
-    })(await toolCall(text + result, tools, ctx));
   }
-  return result.trim();
+  stop;
+  async function doit() {
+    var ast, payload, res, ctype, err, reader, data, reData, reComment;
+    while (!stop(msgs)) {
+      var ast;
+      ast = await text2ast(text + "\n" + msg2text(msgs), ctx);
+      var payload;
+      payload = await ast2payload(ast, ctx);
+      if (stream) payload.stream = stream;
+      var res;
+      res = await toolCall(payload, ctx);
+      if (res.length) {
+        msgs = msgs.concat(res);
+        ires = {
+          value: msgs
+        };
+        continue;
+      }
+      payload = await payload2http(payload, ctx);
+      res = await fetch(payload.url, payload);
+      var ctype;
+      ctype = res.headers.get("content-type");
+      if ((!stream || ctype.includes("application/json"))) {
+        res = await res.json();
+        if ((((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : undefined)) {
+          var err;
+          err = new TuneError(tpl("{type: }{message}", res.error));
+          err.stack = TuneError.ctx2stack(ctx);
+          throw err;
+        }
+        msgs.push(res.choices[0].message);
+        continue;
+      }
+      var reader;
+      var data;
+      var reData;
+      var reComment;
+      reader = res.body
+        .pipeThrough(new TextDecoderStream("utf8"))
+        .getReader();
+      data = "";
+      reData = new RegExp("^data: (.*)");
+      reComment = new RegExp("^:.*");
+      if (ctype.includes("text/event-stream")) {
+        while (res = await reader.read()) {
+          if (res.done) break;
+          (function(it) {
+            it = it.split(/\n/);
+            it = it.map((function(item) {
+              return item.trim();
+            }));
+            it = it.filter((function(item) {
+              return !item.match(reComment);
+            }));
+            it = it.map((function(item, index) {
+              var m;
+              var m;
+              m = item.match(reData);
+              return ((m && ('' === it[(index + 1)])) ? m[1] : undefined);
+            }));
+            it = it.filter((function(item) {
+              return item;
+            }));
+            it = it.map((function(item) {
+              return ((item === '[DONE]') ? item : JSON.parse(item));
+            }));
+            it = it.reduce((function(msg, chunk) {
+              var delta, tc;
+              if ((chunk === "[DONE]")) return msg;
+              var delta;
+              delta = (((typeof chunk !== "undefined") && (chunk !== null) && !Number.isNaN(chunk) && (typeof chunk.choices !== "undefined") && (chunk.choices !== null) && !Number.isNaN(chunk.choices) && (typeof chunk.choices[0] !== "undefined") && (chunk.choices[0] !== null) && !Number.isNaN(chunk.choices[0]) && (typeof chunk.choices[0].delta !== "undefined") && (chunk.choices[0].delta !== null) && !Number.isNaN(chunk.choices[0].delta)) ? chunk.choices[0].delta : (((typeof {} !== "undefined") && ({} !== null) && !Number.isNaN({})) ? {} : undefined));
+              if ((((typeof chunk !== "undefined") && (chunk !== null) && !Number.isNaN(chunk) && (typeof chunk.error !== "undefined") && (chunk.error !== null) && !Number.isNaN(chunk.error)) ? chunk.error : undefined)) {
+                var err;
+                err = new TuneError(JSON.stringify((((typeof chunk !== "undefined") && (chunk !== null) && !Number.isNaN(chunk) && (typeof chunk.error !== "undefined") && (chunk.error !== null) && !Number.isNaN(chunk.error)) ? chunk.error : undefined), null, "  "));
+                err.stack = TuneError.ctx2stack(ctx);
+                throw err;
+              }
+              if (delta.content) {
+                msg.content = msg.content || "";
+                msg.content += delta.content;
+              } else if (delta.tool_calls) {
+                msg.tool_calls = msg.tool_calls || [];
+                tc = delta.tool_calls[0];
+                msg.tool_calls[tc.index] = msg.tool_calls[tc.index] || tc;
+                msg.tool_calls[tc.index].function.arguments += tc.function.arguments;
+              }
+              return msg;
+            }), {
+              role: "assistant",
+              content: null
+            });
+            it = (ires = {
+              value: msgs.concat(Array(it))
+            });
+            return it;
+          })(data += res.value);
+        }
+      }
+      if (ires) msgs = ires.value;
+    }
+    ires = {
+      value: msgs,
+      done: false
+    };
+    ifinish = {
+      done: true
+    };
+    return resolve(msgs);
+  }
+  doit;
+  doit()
+    .catch((function(e) {
+      var err;
+      if ((e.name === "TuneError")) return reject(e);
+      var err;
+      err = new TuneError(e.message);
+      err.stack = TuneError.ctx2stack(ctx);
+      err.error = e;
+      return reject(err);
+    }));
+  return p;
 }
 text2run;
 
-function text2stream(text, ctx, multiTurn) {
-  return (function(re, tools, executeLoop, vars, result, msgs) {
-    re = /{(\w+:)?([~\.\w\-\s/]+)}/g;
-    tools = {};
-    executeLoop = true;
-    vars = [];
-    result = [];
-    msgs = [];
-    return (function(it) {
-      (async function() {
-        var payload, configFile, config, logDir, logFile, parsed, res, chunk, msg, delta, ready, tc, _ref, _err, _ref0;
-        try {
-          it[Symbol.asyncIterator] = it;
-          (function(it) {
-            it = text2roles(it);
-            it = it.map((function(item) {
-              if ((item.role === "system" || item.role === "user" || item.role === "tool")) item.content.replace(re, (function(_, prefix, name, offset, str) {
-                var row, col, _ref, _i;
-                _ref = getPos(offset, str);
-                row = _ref[0];
-                col = _ref[1];
-                return vars.push(Array((prefix ? prefix.slice(0, -1) : undefined), name, row, col));
-              }));
-              return item;
-            }));
-            return it;
-          })(text);
-          await _afor((function(arr, idx) {
-            arr = vars;
-            idx = 0;
-            return (function(res) {
-              var _ref;
-              if ((idx < arr.length)) {
-                res = Array(arr[idx], idx);
-                idx++;
-                _ref = res;
-              } else {
-                _ref = undefined;
-              }
-              return _ref;
-            });
-          }), (async function(item, i) {
-            var name, prefix, filename, schema, parsed, schemaExists, body, _ref, _ref0;
-            try {
-              var name;
-              var prefix;
-              var filename;
-              name = item[1];
-              prefix = item[0];
-              filename = ctx.resolve(name);
-              if (!filename) throw new TuneError(("'" + name + "' not found"), ctx.filename, item[2], item[3]);
-              var schema;
-              var parsed;
-              var schemaExists;
-              schema = chext(filename, "tool");
-              parsed = pparse(filename);
-              schemaExists = ctx.exists(schema);
-              if ((schemaExists || (parsed.ext2 === ".tool"))) {
-                filename = ["mjs", "js", "chat", "cjs", "py", "php"]
-                  .map((function() {
-                    return chext(filename, "tool." + arguments[0]);
-                  }))
-                  .find((function() {
-                    return ctx.exists(arguments[0]);
-                  }));
-                if (!filename) throw new TuneError(("tool " + name + ".tool.js/mjs/chat/cjs/py/php not found"), ctx.filename, item[2], item[3]);
-                if (!schemaExists) {
-                  if ((typeof makeSchema !== 'undefined')) {
-                    body = await makeSchema({
-                      text: ctx.read(filename, "utf8")
-                    }, ctx);
-                    ctx.write(schema, body);
-                  } else {
-                    throw new TuneError(("tool schema for " + name + " not found"), ctx.filename, item[2], item[3]);
-                  }
-                }
-                _ref = tools[pparse(filename).name] = makeTool(filename, ctx);
-              } else {
-                _ref = undefined;
-              }
-              _ref0 = _ref;
-            } catch (e) {
-              throw TuneError.wrap(e, ctx.filename, item[2], item[3]);
-            }
-            return _ref0;
-          }));
-          (function(it) {
-            var _ref;
-            if (it) {
-              result.push(it);
-              msgs = [result];
-              _ref = (!multiTurn ? (executeLoop = false) : undefined);
-            } else {
-              _ref = undefined;
-            }
-            return _ref;
-          })(await toolCall(text, tools, ctx));
-          while (executeLoop) {
-            executeLoop = false;
-            payload = text2api(text + result, ctx);
-            configFile = ctx.resolve(payload.config || "default.config");
-            payload.stream = true;
-            config = payload2api(payload, ctx);
-            logDir = ctx.resolve("TUNE_LOG");
-            logFile = undefined;
-            if ((logDir && ctx.filename)) {
-              var parsed;
-              parsed = path.parse(ctx.filename);
-              logFile = path.resolve(ctx.read(logDir), parsed.base + "_payload_" + new Date()
-                .getTime() + ".json");
-              ctx.write(logFile, JSON.stringify(config, null, "  "));
-            }
-            try {
-              res = await http(config);
-              chunk = {
-                done: false
-              };
-              msg = {
-                role: "assistant",
-                content: null
-              };
-              if ((((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : undefined)) {
-                _ref = undefined;
-                throw new TuneError(tpl("{type: }{message}", res.error), configFile, undefined, undefined, (logFile ? [{
-                  filename: logFile
-                }] : undefined));
-              } else {
-                _ref = undefined;
-              }
-              _ref;
-            } catch (e) {
-              throw TuneError.wrap(e, ctx.filename);
-            }
-            if (res[Symbol.asyncIterator]) {
-              while (!chunk.done) {
-                chunk = await res.next();
-                delta = (((typeof chunk !== "undefined") && (chunk !== null) && !Number.isNaN(chunk) && (typeof chunk.value !== "undefined") && (chunk.value !== null) && !Number.isNaN(chunk.value) && (typeof chunk.value.choices !== "undefined") && (chunk.value.choices !== null) && !Number.isNaN(chunk.value.choices) && (typeof chunk.value.choices[0] !== "undefined") && (chunk.value.choices[0] !== null) && !Number.isNaN(chunk.value.choices[0]) && (typeof chunk.value.choices[0].delta !== "undefined") && (chunk.value.choices[0].delta !== null) && !Number.isNaN(chunk.value.choices[0].delta)) ? chunk.value.choices[0].delta : (((typeof chunk !== "undefined") && (chunk !== null) && !Number.isNaN(chunk) && (typeof chunk.message !== "undefined") && (chunk.message !== null) && !Number.isNaN(chunk.message)) ? chunk.message : (((typeof {} !== "undefined") && ({} !== null) && !Number.isNaN({})) ? {} : undefined)));
-                ready = false;
-                if ((((typeof chunk !== "undefined") && (chunk !== null) && !Number.isNaN(chunk) && (typeof chunk.value !== "undefined") && (chunk.value !== null) && !Number.isNaN(chunk.value) && (typeof chunk.value.error !== "undefined") && (chunk.value.error !== null) && !Number.isNaN(chunk.value.error)) ? chunk.value.error : undefined)) throw new TuneError(JSON.stringify((((typeof chunk !== "undefined") && (chunk !== null) && !Number.isNaN(chunk) && (typeof chunk.value !== "undefined") && (chunk.value !== null) && !Number.isNaN(chunk.value) && (typeof chunk.value.error !== "undefined") && (chunk.value.error !== null) && !Number.isNaN(chunk.value.error)) ? chunk.value.error : undefined), null, "  "), ctx.filename);
-                if (delta.content) {
-                  msg.content = msg.content || "";
-                  msg.content += delta.content;
-                  ready = true;
-                } else if (delta.tool_calls) {
-                  msg.tool_calls = msg.tool_calls || [];
-                  tc = delta.tool_calls[0];
-                  msg.tool_calls[tc.index] = msg.tool_calls[tc.index] || tc;
-                  msg.tool_calls[tc.index].function.arguments += tc.function.arguments;
-                  ready = true;
-                }
-                if (ready) {
-                  try {
-                    msgs = Array(result.concat(Array(msg2text(msg))));
-                  } catch (_err) {}
-                }
-              }
-              result = result.concat(Array(msg2text(msg)));
-            } else {
-              res = (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.choices !== "undefined") && (res.choices !== null) && !Number.isNaN(res.choices) && (typeof res.choices[0] !== "undefined") && (res.choices[0] !== null) && !Number.isNaN(res.choices[0]) && (typeof res.choices[0].message !== "undefined") && (res.choices[0].message !== null) && !Number.isNaN(res.choices[0].message)) ? res.choices[0].message : (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res)) ? res : undefined));
-              result.push(res);
-              msgs = [result];
-            }
-            if (multiTurn)(function(it) {
-              var _ref0;
-              if (it) {
-                executeLoop = true;
-                result.push(it);
-                _ref0 = (msgs = [result]);
-              } else {
-                _ref0 = undefined;
-              }
-              return _ref0;
-            })(await toolCall(text + "\n" + result.join("\n"), tools, ctx));
-          }
-          _ref0 = msgs.push(null);
-        } catch (e) {
-          _ref0 = (msgs = Array(TuneError.wrap(e, ctx.filename)));
-        }
-        return _ref0;
-      })();
-      return it;
-    })({
-      next: (async function() {
-        var msg, _ref, _ref0;
-        if (!msgs.length) await _once((function() {
-          return msgs.length;
-        }), (function() {
-          return undefined;
-        }));
-        msg = msgs.shift();
-        if ((((typeof msg !== "undefined") && (msg !== null) && !Number.isNaN(msg) && (typeof msg.message !== "undefined") && (msg.message !== null) && !Number.isNaN(msg.message)) ? msg.message : undefined)) throw msg;
-        if (msg) {
-          if (Array.isArray(msg)) {
-            _ref = msg.join("\n");
-          } else if (typeof msg === "string") {
-            _ref = msg;
-          } else {
-            _ref = JSON.stringify(msg, null, "  ");
-          }
-          _ref0 = {
-            value: _ref,
-            done: false
-          }
-        } else {
-          _ref0 = {
-            value: undefined,
-            done: true
-          }
-        }
-        return _ref0;
-      })
-    });
-  })();
-}
-text2stream;
+function msg2text(msg, long) {
+  var _ref, _ref0, _ref1;
 
-function msg2text(msg) {
-  var _ref, _ref0;
-  switch (msg.role) {
-    case "user":
-      if (((typeof msg.content === "string") || (msg.content instanceof String))) {
-        _ref0 = ("u: " + msg.content);
-      } else if (Array.isArray(msg.content)) {
-        _ref0 = msg.content
-          .map((function(item) {
-            var _ref1;
-            switch (item.type) {
-              case "text":
-                _ref1 = ("u: " + item.text);
-                break;
-              case "tool_result":
-                _ref1 = ("tr: " + item.content);
-                break;
-              default:
-                _ref1 = undefined;
-                throw new Error(("unsupported user content type: " + item.type));
-            }
-            return _ref1;
-          }))
-          .join("\n");
-      } else {
-        _ref0 = undefined;
-      }
-      _ref = _ref0;
-      break;
-    case "assistant":
-      _ref = (function(res) {
-        var tres, _ref1;
+  function mkline(role, content) {
+    return (long ? tpl("{role}:{new_line}{content}", {
+      role: role,
+      content: content,
+      new_line: ((role === "system" || role === "user" || role === "assistant" || role === "tool_result") ? "\n" : " ")
+    }) : tpl("{role}: {content}", {
+      role: $roles.long2short[role],
+      content: content
+    }));
+  }
+  mkline;
+  if (Array.isArray(msg)) {
+    _ref1 = msg
+      .map((function(item) {
+        return msg2text(item, long);
+      }))
+      .join("\n");
+  } else {
+    switch (msg.role) {
+      case "user":
         if (((typeof msg.content === "string") || (msg.content instanceof String))) {
-          res = "a: " + msg.content;
+          _ref0 = (msg.name ? tpl("{role}({name}): {content}", {
+            name: msg.name,
+            content: msg.content,
+            role: (long ? "user" : "u")
+          }) : mkline("user", msg.content));
         } else if (Array.isArray(msg.content)) {
-          res = msg.content
+          _ref0 = msg.content
             .map((function(item) {
               var _ref1;
               switch (item.type) {
                 case "text":
-                  _ref1 = ("a: " + item.text);
+                  _ref1 = mkline("user", item.text);
                   break;
-                case "tool_use":
-                  _ref1 = tpl("tc: {name} {args}", {
-                    name: item.name,
-                    args: (function(it) {
-                      it = ((it.text && (1 === Object.keys(it).length)) ? it.text : JSON.stringify(it));
-                      return it;
-                    })(item.input)
-                  });
+                case "tool_result":
+                  _ref1 = mkline("tool_result", item.content);
                   break;
                 default:
                   _ref1 = undefined;
@@ -2737,43 +1838,82 @@ function msg2text(msg) {
               return _ref1;
             }))
             .join("\n");
-        }
-        if (msg.tool_calls) tres = msg.tool_calls
-          .map((function(tc) {
-            var args, text;
-            var args;
-            var text;
-            args = dJSON.parse(tc.function.arguments || "{}");
-            text = args.text;
-            delete args.text;
-            args = (Object.keys(args).length ? JSON.stringify(args) : undefined);
-            return tpl("tc: {name}{ args}{\ntext}", {
-              name: tc.function.name,
-              args: args,
-              text: text
-            });
-          }))
-          .join("\n");
-        if ((res && tres)) {
-          _ref1 = (res + "\n" + tres);
-        } else if (tres) {
-          _ref1 = tres;
         } else {
-          _ref1 = res;
+          _ref0 = undefined;
         }
-        return _ref1;
-      })("");
-      break;
-    case "tool":
-      _ref = ("tr: " + msg.content);
-      break;
-    case "error":
-      _ref = ("err: " + msg.content);
-      break;
-    default:
-      _ref = undefined;
+        _ref = _ref0;
+        break;
+      case "assistant":
+        _ref = (function(res) {
+          if (((typeof msg.content === "string") || (msg.content instanceof String))) {
+            res.push(mkline("assistant", msg.content));
+          } else if (Array.isArray(msg.content)) {
+            res.push(msg.content
+              .map((function(item) {
+                var _ref1;
+                switch (item.type) {
+                  case "text":
+                    _ref1 = mkline("assistant", item.text);
+                    break;
+                  case "tool_use":
+                    _ref1 = tpl("{role}: {name} {args}", {
+                      role: (long ? "tool_call" : "tc"),
+                      name: item.name,
+                      args: (function(it) {
+                        it = ((it.text && (1 === Object.keys(it).length)) ? it.text : JSON.stringify(it));
+                        return it;
+                      })(item.input)
+                    });
+                    break;
+                  default:
+                    _ref1 = undefined;
+                    throw new Error(("unsupported user content type: " + item.type));
+                }
+                return _ref1;
+              }))
+              .join("\n"));
+          }
+          if (msg.audio) res.push(tpl("{role}: @{id} {expires_at}\n{transcript}", extend(msg.audio, {
+            role: (long ? "audio" : "au")
+          })));
+          if (msg.tool_calls) res.push(msg.tool_calls
+            .map((function(tc) {
+              var args, text;
+              var args;
+              var text;
+              args = dJSON.parse(tc.function.arguments || "{}");
+              text = args.text;
+              delete args.text;
+              args = (Object.keys(args).length ? JSON.stringify(args) : undefined);
+              return tpl("{role}: {name}{ args}{\ntext}", {
+                name: tc.function.name,
+                args: args,
+                text: text,
+                role: (long ? "tool_call" : "tc")
+              });
+            }))
+            .join("\n"));
+          return res.join("\n");
+        })([]);
+        break;
+      case "tool":
+        _ref = mkline("tool_result", msg.content);
+        break;
+      case "system":
+        _ref = mkline("system", msg.content);
+        break;
+      case "comment":
+        _ref = mkline("comment", msg.content);
+        break;
+      case "error":
+        _ref = mkline("error ", msg.content);
+        break;
+      default:
+        _ref = undefined;
+    }
+    _ref1 = _ref;
   }
-  return _ref;
+  return _ref1;
 }
 msg2text;
 
@@ -2794,14 +1934,15 @@ msg2role;
 function escape(text) {
   return String((((typeof text !== "undefined") && (text !== null) && !Number.isNaN(text)) ? text : (((typeof "" !== "undefined") && ("" !== null) && !Number.isNaN("")) ? "" : undefined)))
     .replace(/{(\s*\w+\s*)}/g, "{!$1}")
-    .replace(/^(s|u|a|c|tr|tc|err):/gm, " $1:");
+    .replace(/^(s|u|a|c|tr|tc|err):/gm, "\\$1:");
 }
 escape;
 
 function unescape(text) {
   return String((((typeof text !== "undefined") && (text !== null) && !Number.isNaN(text)) ? text : (((typeof "" !== "undefined") && ("" !== null) && !Number.isNaN("")) ? "" : undefined)))
-    .replace(/{!(\s*\w+\s*)}/g, "{$1}")
-    .replace(/^\s(s|u|a|c|tr|tc|err):/gm, "$1:");
+    .replace(/\\(?<item>@{1,2}\{\s*[~\.\-\w/]+\s*)(?<proc>(?:\s*\|\s*\w+(?:\s+\w+)*)*\})/g, "$<item>$<proc>")
+    .replace(/\\(?<item>@{1,2}[~\.\-\w/]+)/g, "$<item>")
+    .replace(/^\\(s|system|u|user|a|assistant|c|comment|tr|tool_result|tc|tool_call|err|error):/gm, "$1:");
 }
 unescape;
 
@@ -2842,6 +1983,921 @@ function text2cut(text, cursor) {
   })(0);
 }
 text2cut;
+
+function extend() {
+  var _i;
+  var objects = 1 <= arguments.length ? [].slice.call(arguments, 0, _i = arguments.length - 0) : (_i = 0, []);
+  return (function(result) {
+    var object, key, value, _i0, _ref, _len, _ref0, _len0;
+    _ref = objects;
+    for (_i0 = 0, _len = _ref.length; _i0 < _len; ++_i0) {
+      object = _ref[_i0];
+      _ref0 = object;
+      for (key in _ref0) {
+        value = _ref0[key];
+        if ((typeof value !== 'undefined')) result[key] = JSON.parse(JSON.stringify(value));
+      }
+    }
+    return result;
+  })({});
+}
+extend;
+let msgpack = (function() {
+  "use strict";
+
+  // Serializes a value to a MessagePack byte array.
+  //
+  // data: The value to serialize. This can be a scalar, array or object.
+  // options: An object that defines additional options.
+  // - multiple: (boolean) Indicates whether multiple values in data are concatenated to multiple MessagePack arrays. Default: false.
+  // - invalidTypeReplacement:
+  //   (any) The value that is used to replace values of unsupported types.
+  //   (function) A function that returns such a value, given the original value as parameter.
+  function serialize(data, options) {
+    if (options && options.multiple && !Array.isArray(data)) {
+      throw new Error("Invalid argument type: Expected an Array to serialize multiple values.");
+    }
+    const pow32 = 0x100000000; // 2^32
+    let floatBuffer, floatView;
+    let array = new Uint8Array(128);
+    let length = 0;
+    if (options && options.multiple) {
+      for (let i = 0; i < data.length; i++) {
+        append(data[i]);
+      }
+    } else {
+      append(data);
+    }
+    return array.subarray(0, length);
+
+    function append(data, isReplacement) {
+      switch (typeof data) {
+        case "undefined":
+          appendNull(data);
+          break;
+        case "boolean":
+          appendBoolean(data);
+          break;
+        case "number":
+          appendNumber(data);
+          break;
+        case "string":
+          appendString(data);
+          break;
+        case "object":
+          if (data === null)
+            appendNull(data);
+          else if (data instanceof Date)
+            appendDate(data);
+          else if (Array.isArray(data))
+            appendArray(data);
+          else if (data instanceof Uint8Array || data instanceof Uint8ClampedArray)
+            appendBinArray(data);
+          else if (data instanceof Int8Array || data instanceof Int16Array || data instanceof Uint16Array ||
+            data instanceof Int32Array || data instanceof Uint32Array ||
+            data instanceof Float32Array || data instanceof Float64Array)
+            appendArray(data);
+          else
+            appendObject(data);
+          break;
+        default:
+          if (!isReplacement && options && options.invalidTypeReplacement) {
+            if (typeof options.invalidTypeReplacement === "function")
+              append(options.invalidTypeReplacement(data), true);
+            else
+              append(options.invalidTypeReplacement, true);
+          } else {
+            throw new Error("Invalid argument type: The type '" + (typeof data) + "' cannot be serialized.");
+          }
+      }
+    }
+
+    function appendNull(data) {
+      appendByte(0xc0);
+    }
+
+    function appendBoolean(data) {
+      appendByte(data ? 0xc3 : 0xc2);
+    }
+
+    function appendNumber(data) {
+      if (isFinite(data) && Number.isSafeInteger(data)) {
+        // Integer
+        if (data >= 0 && data <= 0x7f) {
+          appendByte(data);
+        } else if (data < 0 && data >= -0x20) {
+          appendByte(data);
+        } else if (data > 0 && data <= 0xff) { // uint8
+          appendBytes([0xcc, data]);
+        } else if (data >= -0x80 && data <= 0x7f) { // int8
+          appendBytes([0xd0, data]);
+        } else if (data > 0 && data <= 0xffff) { // uint16
+          appendBytes([0xcd, data >>> 8, data]);
+        } else if (data >= -0x8000 && data <= 0x7fff) { // int16
+          appendBytes([0xd1, data >>> 8, data]);
+        } else if (data > 0 && data <= 0xffffffff) { // uint32
+          appendBytes([0xce, data >>> 24, data >>> 16, data >>> 8, data]);
+        } else if (data >= -0x80000000 && data <= 0x7fffffff) { // int32
+          appendBytes([0xd2, data >>> 24, data >>> 16, data >>> 8, data]);
+        } else if (data > 0 && data <= 0xffffffffffffffff) { // uint64
+          appendByte(0xcf);
+          appendInt64(data);
+        } else if (data >= -0x8000000000000000 && data <= 0x7fffffffffffffff) { // int64
+          appendByte(0xd3);
+          appendInt64(data);
+        } else if (data < 0) { // below int64
+          appendBytes([0xd3, 0x80, 0, 0, 0, 0, 0, 0, 0]);
+        } else { // above uint64
+          appendBytes([0xcf, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
+        }
+      } else {
+        // Float
+        if (!floatView) {
+          floatBuffer = new ArrayBuffer(8);
+          floatView = new DataView(floatBuffer);
+        }
+        floatView.setFloat64(0, data);
+        appendByte(0xcb);
+        appendBytes(new Uint8Array(floatBuffer));
+      }
+    }
+
+    function appendString(data) {
+      let bytes = encodeUtf8(data);
+      let length = bytes.length;
+
+      if (length <= 0x1f)
+        appendByte(0xa0 + length);
+      else if (length <= 0xff)
+        appendBytes([0xd9, length]);
+      else if (length <= 0xffff)
+        appendBytes([0xda, length >>> 8, length]);
+      else
+        appendBytes([0xdb, length >>> 24, length >>> 16, length >>> 8, length]);
+
+      appendBytes(bytes);
+    }
+
+    function appendArray(data) {
+      let length = data.length;
+
+      if (length <= 0xf)
+        appendByte(0x90 + length);
+      else if (length <= 0xffff)
+        appendBytes([0xdc, length >>> 8, length]);
+      else
+        appendBytes([0xdd, length >>> 24, length >>> 16, length >>> 8, length]);
+
+      for (let index = 0; index < length; index++) {
+        append(data[index]);
+      }
+    }
+
+    function appendBinArray(data) {
+      let length = data.length;
+
+      if (length <= 0xff)
+        appendBytes([0xc4, length]);
+      else if (length <= 0xffff)
+        appendBytes([0xc5, length >>> 8, length]);
+      else
+        appendBytes([0xc6, length >>> 24, length >>> 16, length >>> 8, length]);
+
+      appendBytes(data);
+    }
+
+    function appendObject(data) {
+      let length = 0;
+      for (let key in data) {
+        if (data[key] !== undefined) {
+          length++;
+        }
+      }
+
+      if (length <= 0xf)
+        appendByte(0x80 + length);
+      else if (length <= 0xffff)
+        appendBytes([0xde, length >>> 8, length]);
+      else
+        appendBytes([0xdf, length >>> 24, length >>> 16, length >>> 8, length]);
+
+      for (let key in data) {
+        let value = data[key];
+        if (value !== undefined) {
+          append(key);
+          append(value);
+        }
+      }
+    }
+
+    function appendDate(data) {
+      let sec = data.getTime() / 1000;
+      if (data.getMilliseconds() === 0 && sec >= 0 && sec < 0x100000000) { // 32 bit seconds
+        appendBytes([0xd6, 0xff, sec >>> 24, sec >>> 16, sec >>> 8, sec]);
+      } else if (sec >= 0 && sec < 0x400000000) { // 30 bit nanoseconds, 34 bit seconds
+        let ns = data.getMilliseconds() * 1000000;
+        appendBytes([0xd7, 0xff, ns >>> 22, ns >>> 14, ns >>> 6, ((ns << 2) >>> 0) | (sec / pow32), sec >>> 24, sec >>> 16, sec >>> 8, sec]);
+      } else { // 32 bit nanoseconds, 64 bit seconds, negative values allowed
+        let ns = data.getMilliseconds() * 1000000;
+        appendBytes([0xc7, 12, 0xff, ns >>> 24, ns >>> 16, ns >>> 8, ns]);
+        appendInt64(sec);
+      }
+    }
+
+    function appendByte(byte) {
+      if (array.length < length + 1) {
+        let newLength = array.length * 2;
+        while (newLength < length + 1)
+          newLength *= 2;
+        let newArray = new Uint8Array(newLength);
+        newArray.set(array);
+        array = newArray;
+      }
+      array[length] = byte;
+      length++;
+    }
+
+    function appendBytes(bytes) {
+      if (array.length < length + bytes.length) {
+        let newLength = array.length * 2;
+        while (newLength < length + bytes.length)
+          newLength *= 2;
+        let newArray = new Uint8Array(newLength);
+        newArray.set(array);
+        array = newArray;
+      }
+      array.set(bytes, length);
+      length += bytes.length;
+    }
+
+    function appendInt64(value) {
+      // Split 64 bit number into two 32 bit numbers because JavaScript only regards 32 bits for
+      // bitwise operations.
+      let hi, lo;
+      if (value >= 0) {
+        // Same as uint64
+        hi = value / pow32;
+        lo = value % pow32;
+      } else {
+        // Split absolute value to high and low, then NOT and ADD(1) to restore negativity
+        value++;
+        hi = Math.abs(value) / pow32;
+        lo = Math.abs(value) % pow32;
+        hi = ~hi;
+        lo = ~lo;
+      }
+      appendBytes([hi >>> 24, hi >>> 16, hi >>> 8, hi, lo >>> 24, lo >>> 16, lo >>> 8, lo]);
+    }
+  }
+
+  // Deserializes a MessagePack byte array to a value.
+  //
+  // array: The MessagePack byte array to deserialize. This must be an Array or Uint8Array containing bytes, not a string.
+  // options: An object that defines additional options.
+  // - multiple: (boolean) Indicates whether multiple concatenated MessagePack arrays are returned as an array. Default: false.
+  function deserialize(array, options) {
+    const pow32 = 0x100000000; // 2^32
+    let pos = 0;
+    if (array instanceof ArrayBuffer) {
+      array = new Uint8Array(array);
+    }
+    if (typeof array !== "object" || typeof array.length === "undefined") {
+      throw new Error("Invalid argument type: Expected a byte array (Array or Uint8Array) to deserialize.");
+    }
+    if (!array.length) {
+      throw new Error("Invalid argument: The byte array to deserialize is empty.");
+    }
+    if (!(array instanceof Uint8Array)) {
+      array = new Uint8Array(array);
+    }
+    let data;
+    if (options && options.multiple) {
+      // Read as many messages as are available
+      data = [];
+      while (pos < array.length) {
+        data.push(read());
+      }
+    } else {
+      // Read only one message and ignore additional data
+      data = read();
+    }
+    return data;
+
+    function read() {
+      const byte = array[pos++];
+      if (byte >= 0x00 && byte <= 0x7f) return byte; // positive fixint
+      if (byte >= 0x80 && byte <= 0x8f) return readMap(byte - 0x80); // fixmap
+      if (byte >= 0x90 && byte <= 0x9f) return readArray(byte - 0x90); // fixarray
+      if (byte >= 0xa0 && byte <= 0xbf) return readStr(byte - 0xa0); // fixstr
+      if (byte === 0xc0) return null; // nil
+      if (byte === 0xc1) throw new Error("Invalid byte code 0xc1 found."); // never used
+      if (byte === 0xc2) return false; // false
+      if (byte === 0xc3) return true; // true
+      if (byte === 0xc4) return readBin(-1, 1); // bin 8
+      if (byte === 0xc5) return readBin(-1, 2); // bin 16
+      if (byte === 0xc6) return readBin(-1, 4); // bin 32
+      if (byte === 0xc7) return readExt(-1, 1); // ext 8
+      if (byte === 0xc8) return readExt(-1, 2); // ext 16
+      if (byte === 0xc9) return readExt(-1, 4); // ext 32
+      if (byte === 0xca) return readFloat(4); // float 32
+      if (byte === 0xcb) return readFloat(8); // float 64
+      if (byte === 0xcc) return readUInt(1); // uint 8
+      if (byte === 0xcd) return readUInt(2); // uint 16
+      if (byte === 0xce) return readUInt(4); // uint 32
+      if (byte === 0xcf) return readUInt(8); // uint 64
+      if (byte === 0xd0) return readInt(1); // int 8
+      if (byte === 0xd1) return readInt(2); // int 16
+      if (byte === 0xd2) return readInt(4); // int 32
+      if (byte === 0xd3) return readInt(8); // int 64
+      if (byte === 0xd4) return readExt(1); // fixext 1
+      if (byte === 0xd5) return readExt(2); // fixext 2
+      if (byte === 0xd6) return readExt(4); // fixext 4
+      if (byte === 0xd7) return readExt(8); // fixext 8
+      if (byte === 0xd8) return readExt(16); // fixext 16
+      if (byte === 0xd9) return readStr(-1, 1); // str 8
+      if (byte === 0xda) return readStr(-1, 2); // str 16
+      if (byte === 0xdb) return readStr(-1, 4); // str 32
+      if (byte === 0xdc) return readArray(-1, 2); // array 16
+      if (byte === 0xdd) return readArray(-1, 4); // array 32
+      if (byte === 0xde) return readMap(-1, 2); // map 16
+      if (byte === 0xdf) return readMap(-1, 4); // map 32
+      if (byte >= 0xe0 && byte <= 0xff) return byte - 256; // negative fixint
+      console.debug("msgpack array:", array);
+      throw new Error("Invalid byte value '" + byte + "' at index " + (pos - 1) + " in the MessagePack binary data (length " + array.length + "): Expecting a range of 0 to 255. This is not a byte array.");
+    }
+
+    function readInt(size) {
+      let value = 0;
+      let first = true;
+      while (size-- > 0) {
+        if (first) {
+          let byte = array[pos++];
+          value += byte & 0x7f;
+          if (byte & 0x80) {
+            value -= 0x80; // Treat most-significant bit as -2^i instead of 2^i
+          }
+          first = false;
+        } else {
+          value *= 256;
+          value += array[pos++];
+        }
+      }
+      return value;
+    }
+
+    function readUInt(size) {
+      let value = 0;
+      while (size-- > 0) {
+        value *= 256;
+        value += array[pos++];
+      }
+      return value;
+    }
+
+    function readFloat(size) {
+      let view = new DataView(array.buffer, pos + array.byteOffset, size);
+      pos += size;
+      if (size === 4)
+        return view.getFloat32(0, false);
+      if (size === 8)
+        return view.getFloat64(0, false);
+    }
+
+    function readBin(size, lengthSize) {
+      if (size < 0) size = readUInt(lengthSize);
+      let data = array.subarray(pos, pos + size);
+      pos += size;
+      return data;
+    }
+
+    function readMap(size, lengthSize) {
+      if (size < 0) size = readUInt(lengthSize);
+      let data = {};
+      while (size-- > 0) {
+        let key = read();
+        data[key] = read();
+      }
+      return data;
+    }
+
+    function readArray(size, lengthSize) {
+      if (size < 0) size = readUInt(lengthSize);
+      let data = [];
+      while (size-- > 0) {
+        data.push(read());
+      }
+      return data;
+    }
+
+    function readStr(size, lengthSize) {
+      if (size < 0) size = readUInt(lengthSize);
+      let start = pos;
+      pos += size;
+      return decodeUtf8(array, start, size);
+    }
+
+    function readExt(size, lengthSize) {
+      if (size < 0) size = readUInt(lengthSize);
+      let type = readUInt(1);
+      let data = readBin(size);
+      switch (type) {
+        case 255:
+          return readExtDate(data);
+      }
+      return {
+        type: type,
+        data: data
+      };
+    }
+
+    function readExtDate(data) {
+      if (data.length === 4) {
+        let sec = ((data[0] << 24) >>> 0) +
+          ((data[1] << 16) >>> 0) +
+          ((data[2] << 8) >>> 0) +
+          data[3];
+        return new Date(sec * 1000);
+      }
+      if (data.length === 8) {
+        let ns = ((data[0] << 22) >>> 0) +
+          ((data[1] << 14) >>> 0) +
+          ((data[2] << 6) >>> 0) +
+          (data[3] >>> 2);
+        let sec = ((data[3] & 0x3) * pow32) +
+          ((data[4] << 24) >>> 0) +
+          ((data[5] << 16) >>> 0) +
+          ((data[6] << 8) >>> 0) +
+          data[7];
+        return new Date(sec * 1000 + ns / 1000000);
+      }
+      if (data.length === 12) {
+        let ns = ((data[0] << 24) >>> 0) +
+          ((data[1] << 16) >>> 0) +
+          ((data[2] << 8) >>> 0) +
+          data[3];
+        pos -= 8;
+        let sec = readInt(8);
+        return new Date(sec * 1000 + ns / 1000000);
+      }
+      throw new Error("Invalid data length for a date value.");
+    }
+  }
+
+  // Encodes a string to UTF-8 bytes.
+  function encodeUtf8(str) {
+    // Prevent excessive array allocation and slicing for all 7-bit characters
+    let ascii = true,
+      length = str.length;
+    for (let x = 0; x < length; x++) {
+      if (str.charCodeAt(x) > 127) {
+        ascii = false;
+        break;
+      }
+    }
+
+    // Based on: https://gist.github.com/pascaldekloe/62546103a1576803dade9269ccf76330
+    let i = 0,
+      bytes = new Uint8Array(str.length * (ascii ? 1 : 4));
+    for (let ci = 0; ci !== length; ci++) {
+      let c = str.charCodeAt(ci);
+      if (c < 128) {
+        bytes[i++] = c;
+        continue;
+      }
+      if (c < 2048) {
+        bytes[i++] = c >> 6 | 192;
+      } else {
+        if (c > 0xd7ff && c < 0xdc00) {
+          if (++ci >= length)
+            throw new Error("UTF-8 encode: incomplete surrogate pair");
+          let c2 = str.charCodeAt(ci);
+          if (c2 < 0xdc00 || c2 > 0xdfff)
+            throw new Error("UTF-8 encode: second surrogate character 0x" + c2.toString(16) + " at index " + ci + " out of range");
+          c = 0x10000 + ((c & 0x03ff) << 10) + (c2 & 0x03ff);
+          bytes[i++] = c >> 18 | 240;
+          bytes[i++] = c >> 12 & 63 | 128;
+        } else bytes[i++] = c >> 12 | 224;
+        bytes[i++] = c >> 6 & 63 | 128;
+      }
+      bytes[i++] = c & 63 | 128;
+    }
+    return ascii ? bytes : bytes.subarray(0, i);
+  }
+
+  // Decodes a string from UTF-8 bytes.
+  function decodeUtf8(bytes, start, length) {
+    // Based on: https://gist.github.com/pascaldekloe/62546103a1576803dade9269ccf76330
+    let i = start,
+      str = "";
+    length += start;
+    while (i < length) {
+      let c = bytes[i++];
+      if (c > 127) {
+        if (c > 191 && c < 224) {
+          if (i >= length)
+            throw new Error("UTF-8 decode: incomplete 2-byte sequence");
+          c = (c & 31) << 6 | bytes[i++] & 63;
+        } else if (c > 223 && c < 240) {
+          if (i + 1 >= length)
+            throw new Error("UTF-8 decode: incomplete 3-byte sequence");
+          c = (c & 15) << 12 | (bytes[i++] & 63) << 6 | bytes[i++] & 63;
+        } else if (c > 239 && c < 248) {
+          if (i + 2 >= length)
+            throw new Error("UTF-8 decode: incomplete 4-byte sequence");
+          c = (c & 7) << 18 | (bytes[i++] & 63) << 12 | (bytes[i++] & 63) << 6 | bytes[i++] & 63;
+        } else throw new Error("UTF-8 decode: unknown multibyte start 0x" + c.toString(16) + " at index " + (i - 1));
+      }
+      if (c <= 0xffff) str += String.fromCharCode(c);
+      else if (c <= 0x10ffff) {
+        c -= 0x10000;
+        str += String.fromCharCode(c >> 10 | 0xd800)
+        str += String.fromCharCode(c & 0x3FF | 0xdc00)
+      } else throw new Error("UTF-8 decode: code point 0x" + c.toString(16) + " exceeds UTF-16 reach");
+    }
+    return str;
+  }
+
+  // The exported functions
+  return {
+    serialize: serialize,
+    deserialize: deserialize,
+
+    // Compatibility with other libraries
+    encode: serialize,
+    decode: deserialize
+  };
+
+
+})();
+
+if (typeof window !== "undefined") {
+  window.msgpack = msgpack;
+}
+path = require("path");
+tune = require("./tune");
+makeContext = tune.makeContext;
+envmd = tune.envmd;
+TuneError = tune.TuneError;
+text2run = tune.text2run;
+
+function env2vars(text) {
+  return text
+    .split(/^(\w+\s*=)/gm)
+    .reduce((function(memo, item, index, arr) {
+      (function(it) {
+        return (it ? memo.push({
+          name: it[1],
+          content: arr[index + 1]
+            .replace(/\n$/, "")
+        }) : undefined);
+      })(item.match(/^(\w+)\s*=/));
+      return memo;
+    }), [])
+    .reduce((function(memo, item) {
+      memo[item.name] = item
+        .content.replace(new RegExp("^\\s*'(.*)'\\s*$"), "$1")
+        .replace(new RegExp("^\\s*\"(.*)\"\\s*$"), "$1");
+      return memo;
+    }), {});
+}
+env2vars;
+
+function pparse(filename) {
+  var parsed, parsed1;
+  var parsed;
+  var parsed1;
+  parsed = path.parse(filename);
+  parsed1 = path.parse(parsed.name);
+  if (parsed1.ext) {
+    parsed.ext2 = parsed1.ext;
+    parsed.name = parsed1.name;
+  }
+  return parsed;
+}
+pparse;
+async function runFile(filename, ctx) {
+  var parsed, node, text, lctx, res, module, spawnSync, result, sres, _i, _ref, _ref0, _ref1, _ref2, _ref3;
+  var args = 3 <= arguments.length ? [].slice.call(arguments, 2, _i = arguments.length - 0) : (_i = 2, []);
+  try {
+    var parsed;
+    parsed = pparse(filename);
+    if ((parsed.ext === ".chat")) {
+      var node;
+      node = await ctx.resolve(filename);
+      var text;
+      text = await node.read();
+      var lctx;
+      lctx = ctx.clone();
+      lctx.use(envmd(args[0]));
+      var res;
+      res = await text2run(text, lctx);
+      _ref = res["slice"](-1)[0].content;
+    } else if (parsed.ext === ".mjs") {
+      var module;
+      module = await import(filename + "?t=" + Date.now());
+      if ((typeof module.default !== "function")) throw Error("JS file does not export default function");
+      _ref = module.default.call.apply(module.default, [].concat([ctx]).concat(args).concat([ctx]));
+    } else if (parsed.ext === ".js" || parsed.ext === ".cjs") {
+      var module;
+      module = require(filename);
+      if ((typeof module !== "function")) throw Error("JS file does not export default function");
+      _ref = module.call.apply(module, [].concat([ctx]).concat(args).concat([ctx]));
+    } else if (parsed.ext === ".py" || parsed.ext === ".php") {
+      var spawnSync;
+      spawnSync = require("child_process").spawnSync;
+      var res;
+      switch (parsed.ext) {
+        case ".py":
+          _ref0 = "python";
+          break;
+        case ".php":
+          _ref0 = "php";
+          break;
+        default:
+          _ref0 = undefined;
+      }
+      switch (parsed.ext) {
+        case ".py":
+          _ref1 = "run.py";
+          break;
+        case ".php":
+          _ref1 = "run.php";
+          break;
+        default:
+          _ref1 = undefined;
+      }
+      res = spawnSync(_ref0, Array(path.resolve(__dirname, _ref1)), {
+        input: JSON.stringify({
+          filename: filename,
+          arguments: args[0],
+          ctx: ""
+        }),
+        env: extend(process.env, ctx.env)
+      });
+      if (res.error) throw res.error;
+      var result;
+      result = Array();
+      if (res.stderr.length) result.push(res.stderr.toString("utf8"));
+      if (res.stdout.length) {
+        var sres;
+        try {
+          _ref2 = msgpack.deserialize(Buffer.from(res.stdout.toString("utf8"), "hex"));
+        } catch (e) {
+          console.log("cant decode messageback", e);
+          _ref2 = res.stdout.toString("utf8");
+        }
+        sres = _ref2;
+        Array.isArray(sres) ? result = result.concat(sres) : result.push(sres);
+      }
+      if ((result.length === 1)) result = result[0];
+      _ref = result;
+    } else {
+      _ref = undefined;
+      throw Error(tpl("{ext} extension is not supported, for {filename} ", {
+        ext: parsed.ext,
+        filename: filename
+      }));
+    }
+    _ref3 = _ref;
+  } catch (e) {
+    throw e;
+  }
+  return _ref3;
+}
+runFile;
+
+function fsmd(paths, opts, fs) {
+  var imageExt, audioExt;
+  fs = fs || require("fs");
+  if (!Array.isArray(paths)) paths = Array(paths);
+  var imageExt;
+  var audioExt;
+  imageExt = "png jpeg jpg webp"
+    .split(" ")
+    .map((function(item) {
+      return ("." + item);
+    }));
+  audioExt = "mp3 wav"
+    .split(" ")
+    .map((function(item) {
+      return ("." + item);
+    }));
+
+  function mkfsmd1(p) {
+    return (async function(name, ctx, args, next) {
+      var fname, parsed, item, parsed1, fileType, fullname, schemaFile, schema, _i, _ref, _len, _ref0, _ref1, _ref2, _ref3;
+      var fname;
+      var parsed;
+      fname = path.resolve(p, ((name === "*") ? "default" : name));
+      parsed = pparse(fname);
+      if (!fs.existsSync(parsed.dir)) return;
+      _ref = fs.readdirSync(parsed.dir)
+        .sort((function(a, b) {
+          var exts, idx1, idx2;
+          var exts;
+          var idx1;
+          var idx2;
+          exts = [".js", ".mjs", ".cjs", ".py", ".php", ".chat"];
+          idx1 = exts.indexOf(path.extname(a));
+          idx2 = exts.indexOf(path.extname(b));
+          return (idx2 - idx1);
+        }));
+      for (_i = 0, _len = _ref.length; _i < _len; ++_i) {
+        item = _ref[_i];
+        var parsed1;
+        parsed1 = pparse(item);
+        if ((parsed1.name !== parsed.name)) continue;
+        var fileType;
+        if ((parsed1.ext2 === ".tool")) {
+          _ref0 = "tool";
+        } else if (parsed1.ext2 === ".llm") {
+          _ref0 = "llm";
+        } else if (parsed1.ext2 === ".proc") {
+          _ref0 = "processor";
+        } else if (parsed1.ext === ".jpg" || parsed1.ext === ".jpeg" || parsed1.ext === ".png" || parsed1.ext === ".webp") {
+          _ref0 = "image";
+        } else if (parsed1.ext === ".mp3" || parsed1.ext === ".wav") {
+          _ref0 = "audio";
+        } else {
+          _ref0 = "text";
+        }
+        fileType = _ref0;
+        var fullname;
+        fullname = path.resolve(parsed.dir, item);
+        if ((args && (args !== fileType))) continue;
+        if (((item === parsed.base) || !parsed.ext || (parsed1.ext2 && (parsed.base === (parsed1.name + parsed1.ext2))) || (name === "*"))) {
+          switch (fileType) {
+            case "tool":
+              var schemaFile;
+              schemaFile = path.format({
+                root: parsed.root,
+                dir: parsed.dir,
+                name: parsed1.name,
+                ext: ".schema.json"
+              });
+              var schema;
+              schema;
+              if (fs.existsSync(schemaFile)) {
+                schema = JSON.parse(fs.readFileSync(schemaFile, "utf8"));
+              } else if (opts && opts.makeSchema) {
+                schema = await opts.makeSchema({
+                  text: fs.readFileSync(fullname, "utf8")
+                }, ctx);
+                fs.writeFileSync(schemaFile, schema);
+                schema = JSON.parse(schema);
+              } else {
+                throw new TuneError(("schema file not found " + schemaFile));
+              }
+              _ref1 = {
+                type: "tool",
+                schema: schema,
+                name: parsed1.name,
+                exec: (async function(params, ctx) {
+                  return runFile(fullname, ctx, params);
+                }),
+                read: (async function() {
+                  return fs.readFileSync(fullname, "utf8");
+                }),
+                dirname: parsed.dir,
+                fullname: fullname
+              }
+              break;
+            case "llm":
+              _ref1 = {
+                type: "llm",
+                dirname: parsed.dir,
+                fullname: fullname,
+                name: parsed1.name,
+                exec: (async function(payload, ctx) {
+                  return runFile(fullname, ctx, payload);
+                }),
+                read: (async function() {
+                  return fs.readFileSync(fullname, "utf8");
+                })
+              }
+              break;
+            case "processor":
+              _ref1 = {
+                type: "processor",
+                name: parsed1.name,
+                exec: (function(node, args, ctx) {
+                  return runFile(fullname, ctx, node, args);
+                }),
+                read: (async function() {
+                  return fs.readFileSync(fullname, "utf8");
+                }),
+                dirname: parsed.dir,
+                fullname: fullname
+              }
+              break;
+            case "image":
+              if ((parsed1.ext === ".jpg" || parsed1.ext === ".jpeg")) {
+                _ref2 = "image/jpeg";
+              } else if (parsed1.ext === ".png") {
+                _ref2 = "image/png";
+              } else if (parsed1.ext === ".webp") {
+                _ref2 = "image/webp";
+              } else {
+                _ref2 = undefined;
+              }
+              _ref1 = {
+                type: "image",
+                dirname: parsed.dir,
+                fullname: fullname,
+                mimetype: _ref2,
+                read: (async function() {
+                  return fs.readFileSync(fullname);
+                })
+              }
+              break;
+            case "audio":
+              if ((parsed1.ext === ".mp3")) {
+                _ref3 = "audio/mpeg";
+              } else if (parsed1.ext === ".wav") {
+                _ref3 = "audio/wav";
+              } else {
+                _ref3 = undefined;
+              }
+              _ref1 = {
+                type: "audio",
+                dirname: parsed.dir,
+                fullname: fullname,
+                mimetype: _ref3,
+                read: (async function() {
+                  return fs.readFileSync(fullname);
+                })
+              }
+              break;
+            case "text":
+              _ref1 = {
+                type: "text",
+                dirname: parsed.dir,
+                fullname: fullname,
+                name: parsed1.name,
+                read: (async function(binary) {
+                  var buf, i, c;
+                  if (binary) return fs.readFileSync(fullname);
+                  var buf;
+                  buf = fs.readFileSync(fullname, "utf8");
+                  var i;
+                  i = 0;
+                  while (i < Math.min(1024, buf.length)) {
+                    var c;
+                    c = buf.charCodeAt(i);
+                    if (((c === 65533) || (c <= 8))) throw Error(tpl("{} is a binary file, can not include it", fullname));
+                    i++;
+                  }
+                  return buf;
+                })
+              }
+              break;
+            default:
+              _ref1 = undefined;
+          }
+          return _ref1;
+        }
+      }
+      return undefined;
+    });
+  }
+  mkfsmd1;
+  return (async function(name, ctx, args, next) {
+    var lpaths, handles, p, lenv, res, _i, _ref, _len, _i0, _ref0, _len0;
+    var lpaths;
+    lpaths = ctx.stack
+      .filter((function(item) {
+        return !!item.dirname;
+      }))
+      .map((function(item) {
+        return item.dirname;
+      }))
+      .reverse()
+      .concat(paths);
+    var handles;
+    handles = [];
+    _ref = lpaths;
+    for (_i = 0, _len = _ref.length; _i < _len; ++_i) {
+      p = _ref[_i];
+      var lenv;
+      lenv = path.resolve(p, ".env");
+      if ((!lenv || !fs.existsSync(lenv))) continue;
+      lenv = env2vars(fs.readFileSync(lenv, "utf8"));
+      handles.push(envmd(lenv));
+    }
+    _ref0 = lpaths;
+    for (_i0 = 0, _len0 = _ref0.length; _i0 < _len0; ++_i0) {
+      p = _ref0[_i0];
+      handles.push(mkfsmd1(p));
+    }
+    while (handles.length) {
+      var res;
+      res = await handles.shift()(name, ctx, args, next);
+      if (res) return res;
+    }
+    return next();
+  });
+}
+fsmd;
 
 function _afor(next, body) {
   return new Promise((function(resolve, reject) {
@@ -2916,6 +2972,16 @@ function extend() {
   })({});
 }
 extend;
+
+function delay(ms, callback) {
+  return new Promise((function(resolve, reject) {
+    return setTimeout((function() {
+      resolve();
+      return ((typeof callback === "function") ? callback() : undefined);
+    }), ms);
+  }));
+}
+delay;
 path = require("path");
 assert = require("node:assert/strict");
 util = require("util");
@@ -2936,9 +3002,29 @@ process.stdin.on("data", (function(chunk) {
   }
   return _ref;
 }));
-ctx = makeContext(process.env, fs, filename);
-chat2schema = ctx.resolve("schema.tool.chat");
-makeSchema = makeTool(chat2schema, makeContext(process.env, fs, path.dirname(chat2schema)));
+ctx;
+(async function() {
+  var dirs, makeSchema, _ref;
+  try {
+    dirs = [];
+    if (process.env.TUNE_PATH) dirs = process.env.TUNE_PATH.split(":");
+    makeSchema = (async function(params, ictx) {
+      return await runFile(path.join(__dirname, "schema.tool.chat"), ctx, params);
+    });
+    ctx = makeContext(process.env, fsmd(dirs, {
+      makeSchema: makeSchema
+    }));
+    _ref = ctx.stack.push({
+      filename: filename
+    });
+  } catch (e) {
+    log({
+      output: "err: " + e.toString() + ((typeof e.stack === "string") ? ("\n" + e.stack) : "")
+    });
+    _ref = process.exit();
+  }
+  return _ref;
+})();
 
 function log(obj) {
   return fs.writeFileSync(3, JSON.stringify(extend(obj, {
@@ -2947,7 +3033,7 @@ function log(obj) {
 }
 log;
 async function run(text) {
-  var res, chunk, all, lines, r, lastMsg, _ref;
+  var res, chunk, all, lines, longFormatRegex, long, r, lastMsg, _err, _ref;
   try {
     var res;
     var chunk;
@@ -2961,8 +3047,20 @@ async function run(text) {
     text = lines.slice(split.start, split.mid)
       .join("\n")
       .trim();
+    longFormatRegex = /^(system|user|tool_call|tool_result|assistant|error):/;
+    long = longFormatRegex.test(text);
     log({});
-    r = text2stream(text, ctx, false);
+    r = text2run(text, ctx, {
+      stop: "step",
+      stream: true
+    });
+    r.promise.catch((function(e) {
+      console.log(e);
+      log({
+        output: "err: " + e.toString() + ((typeof e.stack === "string") ? ("\n" + e.stack) : "")
+      });
+      return process.exit();
+    }));
     if (r[Symbol.asyncIterator]) {
       while (!chunk.done) {
         res = chunk.value || "";
@@ -2971,19 +3069,22 @@ async function run(text) {
           continue;
         }
         res = chunk.value;
-        log({
-          output: res
-        });
+        try {
+          log({
+            output: msg2text(res, long)
+          });
+        } catch (_err) {}
         chunk = await r.next();
       }
     } else {
       res = r;
     }
-    lastMsg = text2roles(res)["slice"](-1)[0];
+    lastMsg = text2roles(msg2text(res["slice"](-1)[0], long))["slice"](-1)[0];
     log({
-      output: res,
+      output: msg2text(res, long),
       lastRole: (((typeof lastMsg !== "undefined") && (lastMsg !== null) && !Number.isNaN(lastMsg) && (typeof lastMsg.role !== "undefined") && (lastMsg.role !== null) && !Number.isNaN(lastMsg.role)) ? lastMsg.role : undefined)
     });
+    await delay(500);
     _ref = process.exit();
   } catch (e) {
     log({

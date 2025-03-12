@@ -129,9 +129,9 @@ local function tune_chat(opts, callback)
         new_lines = vim.split(completion, "\n", { trimempty = false })
       end
 
-      if last_role == "assistant" then
-        new_lines[#new_lines+1] = "u:  "
-      end
+      -- if last_role == "assistant" then
+      --  new_lines[#new_lines+1] = "u:  "
+      --end
 
       -- vim.cmd("earlier " ..  num_changes)
       -- vim.api.nvim_buf_set_lines(bufnr, split["mid"], split["end"], true, new_lines)
