@@ -4,7 +4,7 @@ A Neovim plugin to chat with LLM in buffer.
 
 ## Demo
 
-<img src="https://github.com/user-attachments/assets/2fb43eca-6a8c-4acd-9fee-0116e2c64a58" width="80%">
+<img src="https://github.com/iovdin/tune/blob/770f382a03a25e15eeef293f553b6aee0f3531f6/docs/assets/gifs/tune.gif">
 
 ## Why tune.nvim?
 
@@ -35,9 +35,9 @@ Use `.chat` files with a clear syntax for different message types:
 
 Include external content in your chats:
 ```chat
- s: {system}           # Expand from system.txt
- u: {env_variable}     # Use environment variables
- u: describe {image}   # Include images
+ s: @system           # Expand from system.txt
+ u: @env_variable     # Use environment variables
+ u: describe @image   # Include images
 ```
 
 ### Multiple Chats
