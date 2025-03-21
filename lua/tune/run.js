@@ -1691,13 +1691,13 @@ function text2run(text, ctx, opts) {
       ctype = res.headers.get("content-type");
       if ((!stream || ctype.includes("application/json"))) {
         res = await res.json();
-        if ((((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : undefined)) {
+        if (((((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : undefined) || (res.object === "error"))) {
           var err;
-          err = new TuneError(tpl("{type: }{message}", res.error));
+          err = new TuneError(tpl("{type: }{message}", (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res)) ? res : undefined))));
           err.stack = TuneError.ctx2stack(ctx);
           throw err;
         }
-        msgs.push(res.choices[0].message);
+        msgs.push((((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.message !== "undefined") && (res.message !== null) && !Number.isNaN(res.message)) ? res.message : (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.choices !== "undefined") && (res.choices !== null) && !Number.isNaN(res.choices) && (typeof res.choices[0] !== "undefined") && (res.choices[0] !== null) && !Number.isNaN(res.choices[0]) && (typeof res.choices[0].message !== "undefined") && (res.choices[0].message !== null) && !Number.isNaN(res.choices[0].message)) ? res.choices[0].message : undefined)));
         continue;
       }
       var reader;
@@ -1845,7 +1845,7 @@ function msg2text(msg, long) {
         break;
       case "assistant":
         _ref = (function(res) {
-          if (((typeof msg.content === "string") || (msg.content instanceof String))) {
+          if ((msg.content && ((typeof msg.content === "string") || (msg.content instanceof String)))) {
             res.push(mkline("assistant", msg.content));
           } else if (Array.isArray(msg.content)) {
             res.push(msg.content
@@ -2667,7 +2667,7 @@ async function runFile(filename, ctx) {
 runFile;
 
 function fsmd(paths, opts, fs) {
-  var imageExt, audioExt;
+  var imageExt, audioExt, envCache;
   fs = fs || require("fs");
   if (!Array.isArray(paths)) paths = Array(paths);
   var imageExt;
@@ -2684,7 +2684,7 @@ function fsmd(paths, opts, fs) {
     }));
 
   function mkfsmd1(p) {
-    return (async function(name, ctx, args, next) {
+    return (async function(name, ctx, args) {
       var fname, parsed, item, parsed1, fileType, fullname, schemaFile, schema, _i, _ref, _len, _ref0, _ref1, _ref2, _ref3;
       var fname;
       var parsed;
@@ -2718,6 +2718,8 @@ function fsmd(paths, opts, fs) {
           _ref0 = "image";
         } else if (parsed1.ext === ".mp3" || parsed1.ext === ".wav") {
           _ref0 = "audio";
+        } else if (parsed1.ext2 === ".ctx") {
+          _ref0 = "context";
         } else {
           _ref0 = "text";
         }
@@ -2773,6 +2775,17 @@ function fsmd(paths, opts, fs) {
                 }),
                 read: (async function() {
                   return fs.readFileSync(fullname, "utf8");
+                })
+              }
+              break;
+            case "context":
+              ctx.use((async function(name, ctx, args, next) {
+                return runFile(fullname, ctx, name, ctx, args, next);
+              }));
+              _ref1 = {
+                type: "text",
+                read: (async function() {
+                  return "";
                 })
               }
               break;
@@ -2861,8 +2874,9 @@ function fsmd(paths, opts, fs) {
     });
   }
   mkfsmd1;
+  envCache = {};
   return (async function(name, ctx, args, next) {
-    var lpaths, handles, p, lenv, res, _i, _ref, _len, _i0, _ref0, _len0;
+    var lpaths, handles, p, envFile, res, _i, _ref, _len;
     var lpaths;
     lpaths = ctx.stack
       .filter((function(item) {
@@ -2878,20 +2892,20 @@ function fsmd(paths, opts, fs) {
     _ref = lpaths;
     for (_i = 0, _len = _ref.length; _i < _len; ++_i) {
       p = _ref[_i];
-      var lenv;
-      lenv = path.resolve(p, ".env");
-      if ((!lenv || !fs.existsSync(lenv))) continue;
-      lenv = env2vars(fs.readFileSync(lenv, "utf8"));
-      handles.push(envmd(lenv));
-    }
-    _ref0 = lpaths;
-    for (_i0 = 0, _len0 = _ref0.length; _i0 < _len0; ++_i0) {
-      p = _ref0[_i0];
+      var envFile;
+      envFile = path.resolve(p, ".env");
+      if (!envCache[envFile]) envCache[envFile] = ((!envFile || !fs.existsSync(envFile)) ? {} : env2vars(fs.readFileSync(envFile, "utf8")));
+      if (envCache[envFile][name]) return {
+        type: "text",
+        read: (async function() {
+          return envCache[envFile][name];
+        })
+      };
       handles.push(mkfsmd1(p));
     }
     while (handles.length) {
       var res;
-      res = await handles.shift()(name, ctx, args, next);
+      res = await handles.shift()(name, ctx, args);
       if (res) return res;
     }
     return next();
@@ -3004,26 +3018,64 @@ process.stdin.on("data", (function(chunk) {
 }));
 ctx;
 (async function() {
-  var dirs, makeSchema, _ref;
+  var dirs, dir, name, ext, module, m, _i, _res, _ref, _len, _i0, _res0, _ref0, _len0, _ref1, _i1, _res1, _ref2, _len1, _ref3, _ref4;
   try {
-    dirs = [];
-    if (process.env.TUNE_PATH) dirs = process.env.TUNE_PATH.split(":");
-    makeSchema = (async function(params, ictx) {
-      return await runFile(path.join(__dirname, "schema.tool.chat"), ctx, params);
+    log({
+      output: "..."
     });
-    ctx = makeContext(process.env, fsmd(dirs, {
-      makeSchema: makeSchema
-    }));
-    _ref = ctx.stack.push({
+    dirs = [];
+    if (process.env.TUNE_PATH) dirs = process.env.TUNE_PATH.split(path.delimiter);
+    ctx = makeContext(process.env);
+    ctx.stack.push({
       filename: filename
     });
+    _res = [];
+    _ref = dirs;
+    for (_i = 0, _len = _ref.length; _i < _len; ++_i) {
+      dir = _ref[_i];
+      _res0 = [];
+      _ref0 = ["default.ctx.js", "default.ctx.cjs", "default.ctx.mjs"];
+      for (_i0 = 0, _len0 = _ref0.length; _i0 < _len0; ++_i0) {
+        name = _ref0[_i0];
+        var filename;
+        var ext;
+        filename = path.join(dir, name);
+        ext = path.extname(name);
+        if (!fs.existsSync(filename)) continue;
+        module = ((ext === ".js" || ext === ".cjs") ? require(filename) : await import(filename));
+        if ((typeof module === "function")) {
+          _ref1 = ctx.use(module);
+        } else if (Array.isArray(module)) {
+          _res1 = [];
+          _ref2 = module;
+          for (_i1 = 0, _len1 = _ref2.length; _i1 < _len1; ++_i1) {
+            m = _ref2[_i1];
+            if (typeof(_ref3 = (typeof m === "function") ? ctx.use(m) : log({
+                output: tpl("err: Context file export is not an array of functions or function {filename}", {
+                  filename: filename
+                })
+              })) !== 'undefined') _res1.push(_ref3);
+          }
+          _ref1 = _res1;
+        } else {
+          _ref1 = log({
+            output: tpl("err: Context file export is not an array of functions or function{filename}", {
+              filename: filename
+            })
+          });
+        }
+        if (typeof _ref1 !== 'undefined') _res0.push(_ref1);
+      }
+      if (typeof _res0 !== 'undefined') _res.push(_res0);
+    }
+    _ref4 = _res;
   } catch (e) {
     log({
       output: "err: " + e.toString() + ((typeof e.stack === "string") ? ("\n" + e.stack) : "")
     });
-    _ref = process.exit();
+    _ref4 = process.exit();
   }
-  return _ref;
+  return _ref4;
 })();
 
 function log(obj) {
@@ -3033,7 +3085,7 @@ function log(obj) {
 }
 log;
 async function run(text) {
-  var res, chunk, all, lines, longFormatRegex, long, r, lastMsg, _err, _ref;
+  var res, chunk, all, lines, longFormatRegex, long, r, _err, _ref;
   try {
     var res;
     var chunk;
@@ -3049,7 +3101,12 @@ async function run(text) {
       .trim();
     longFormatRegex = /^(system|user|tool_call|tool_result|assistant|error):/;
     long = longFormatRegex.test(text);
-    log({});
+    log({
+      output: msg2text({
+        role: "assistant",
+        content: ""
+      }, long)
+    });
     r = text2run(text, ctx, {
       stop: "step",
       stream: true
@@ -3079,10 +3136,8 @@ async function run(text) {
     } else {
       res = r;
     }
-    lastMsg = text2roles(msg2text(res["slice"](-1)[0], long))["slice"](-1)[0];
     log({
-      output: msg2text(res, long),
-      lastRole: (((typeof lastMsg !== "undefined") && (lastMsg !== null) && !Number.isNaN(lastMsg) && (typeof lastMsg.role !== "undefined") && (lastMsg.role !== null) && !Number.isNaN(lastMsg.role)) ? lastMsg.role : undefined)
+      output: msg2text(res, long)
     });
     await delay(500);
     _ref = process.exit();

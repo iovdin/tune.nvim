@@ -1,11 +1,7 @@
 local uv = (vim.uv or vim.loop)
-local progress_chars = { '⠟', '⠯', '⠷', '⠾', '⠽', '⠻' } 
-local progress_index = 0
+-- Define highlight group for the text being generated
+local ns_id = vim.api.nvim_create_namespace('tune_generating_text')
 
-local get_progress = function()
-  progress_index = (progress_index + 1) % #progress_chars
-  return progress_chars[progress_index + 1]
-end
 
 -- TODO:
 -- add {} to highlight syntax
@@ -63,6 +59,47 @@ local function tune_chat(opts, callback)
   local delimiter = package.config:sub(1,1)  -- Will be '\\' on Windows, '/' on Unix-like systems
   local path_separator = vim.loop.os_uname().sysname == "Windows_NT" and ";" or ":"
 
+  local s_start = nil
+  local s_end = #lines
+  local split = nil
+  local roles = {
+    c = true,
+    comment = true,
+    s = true,
+    system = true,
+    u = true,
+    user = true,
+    a = true,
+    assistant = true,
+    tc = true,
+    tool_call = true,
+    tr = true,
+    tool_result = true,
+    err = true,
+    error = true,
+  }
+
+  -- print("line: " .. line)
+  for index, item in ipairs(lines) do
+    index = index - 1
+    role, content = item:match('^(%a+):(.*)')
+    if role and roles[role]  then
+      -- print(role .. " " .. index)
+
+      if s_start == nil and index > line then
+        s_start = index
+      end
+      if  (role == "comment" or role == "c") and content:match('%s*%-%-%-.*') ~= nil and index > line and s_end == #lines then
+        s_end = index
+      end
+    end
+  end
+  if s_start == nil then
+    s_start = s_end
+  end
+
+  -- print("result: " .. s_start .. "-" .. s_end)
+
   local TUNE_PATH = ({
     vim.fn.getcwd(),
     dirname,
@@ -89,10 +126,7 @@ local function tune_chat(opts, callback)
   local stderr = uv.new_pipe(false)
   local channel = uv.new_pipe(false)
   local timer = uv.new_timer()
-  local s_end = nil
-  local s_start = nil
-  local split = nil
-  local last_role = nil
+  -- local last_role = nil
   local num_changes = 0
   local completion = nil
   local new_lines = nil
@@ -103,12 +137,15 @@ local function tune_chat(opts, callback)
     stdio = { stdin, stdout, stderr, channel },
     env = env
   }, function(code, signal)
-    stdout:close()
+      stdout:close()
     stderr:close()
     stdin:close()
     channel:close()
-    timer:stop()
-    timer:close()
+    
+    -- Clear the highlighting when generation is complete
+    vim.schedule(function()
+      vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+    end)
 
     -- handle:close()
       --
@@ -116,6 +153,7 @@ local function tune_chat(opts, callback)
     if tune_pid[bufnr] == pid then
       tune_pid[bufnr] = nil
     end
+
 
     vim.schedule(function()
       if split == nil or tune_pid[bufnr] ~= nil then
@@ -129,7 +167,7 @@ local function tune_chat(opts, callback)
         new_lines = vim.split(completion, "\n", { trimempty = false })
       end
 
-      -- if last_role == "assistant" then
+      --if last_role == "assistant" then
       --  new_lines[#new_lines+1] = "u:  "
       --end
 
@@ -162,27 +200,8 @@ local function tune_chat(opts, callback)
   --push_key('<C-c>')
   stdin:write(vim.json.encode({ input = table.concat(lines, "\n")}))
   
-  timer:start(0, 100, function()
-    if tune_pid[bufnr] ~= pid then
-      return
-    end
-    vim.schedule(function()
-      if s_end == nil then
-        return
-      end
-  
-      if completion == nil then
-        new_lines = { get_progress() }
-      else
-        new_lines = vim.split(completion, "\n", { trimempty = false })
-        new_lines[#new_lines + 1] = get_progress()
-      end
-      vim.api.nvim_buf_set_lines(bufnr, s_start, s_end, true, new_lines)
-      s_end = s_start + #new_lines 
-      num_changes = num_changes + 1
-      set_cursor(bufnr, s_end, 0)
-    end)
-  end)
+    -- Timer function removed - we'll highlight directly when data arrives
+
   uv.read_start(stdout, function(err, data)
     assert(not err, err)
     if data then
@@ -206,7 +225,7 @@ local function tune_chat(opts, callback)
       end
 
       split = parsed.split
-      last_role = parsed.lastRole
+      -- last_role = parsed.lastRole
 
       if split == nil then
          return
@@ -218,7 +237,31 @@ local function tune_chat(opts, callback)
       end
 
       completion = parsed.output
+      
+      -- Apply highlighting to the generated text
+      vim.schedule(function()
+        if completion and #completion > 0 then
+          -- First, clear any existing highlights in the namespace
+          vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+          
+          -- Set the generated text in the buffer
+          local new_lines = vim.split(completion, "\n", { trimempty = false })
+          vim.api.nvim_buf_set_lines(bufnr, s_start, s_end, true, new_lines)
+          s_end = s_start + #new_lines
+          
+          -- Apply highlighting to each line of the generated text
+          for line_num = s_start, s_end - 1 do
+            if line_num < vim.api.nvim_buf_line_count(bufnr) then
+              local line = vim.api.nvim_buf_get_lines(bufnr, line_num, line_num + 1, false)[1]
+              vim.api.nvim_buf_add_highlight(bufnr, ns_id, "DiffChange", line_num, 0, #line)
+            end
+          end
+          
+          set_cursor(bufnr, s_end, 0)
+        end
+      end)
     end
+
   end)
 
   uv.read_start(stderr, function(err, data)

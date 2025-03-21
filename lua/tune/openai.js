@@ -4,6 +4,7 @@ module.exports = function(props) {
     delete props.auth_key;
     delete props.url;
     const key = await ctx.read('OPENAI_KEY' || auth_key);
+    console.log("key", key)
 
     return ({
       url: url || "https://api.openai.com/v1/chat/completions",

@@ -683,7 +683,7 @@ async function runFile(filename, ctx) {
 runFile;
 
 function fsmd(paths, opts, fs) {
-  var imageExt, audioExt;
+  var imageExt, audioExt, envCache;
   fs = fs || require("fs");
   if (!Array.isArray(paths)) paths = Array(paths);
   var imageExt;
@@ -700,7 +700,7 @@ function fsmd(paths, opts, fs) {
     }));
 
   function mkfsmd1(p) {
-    return (async function(name, ctx, args, next) {
+    return (async function(name, ctx, args) {
       var fname, parsed, item, parsed1, fileType, fullname, schemaFile, schema, _i, _ref, _len, _ref0, _ref1, _ref2, _ref3;
       var fname;
       var parsed;
@@ -734,6 +734,8 @@ function fsmd(paths, opts, fs) {
           _ref0 = "image";
         } else if (parsed1.ext === ".mp3" || parsed1.ext === ".wav") {
           _ref0 = "audio";
+        } else if (parsed1.ext2 === ".ctx") {
+          _ref0 = "context";
         } else {
           _ref0 = "text";
         }
@@ -789,6 +791,17 @@ function fsmd(paths, opts, fs) {
                 }),
                 read: (async function() {
                   return fs.readFileSync(fullname, "utf8");
+                })
+              }
+              break;
+            case "context":
+              ctx.use((async function(name, ctx, args, next) {
+                return runFile(fullname, ctx, name, ctx, args, next);
+              }));
+              _ref1 = {
+                type: "text",
+                read: (async function() {
+                  return "";
                 })
               }
               break;
@@ -877,8 +890,9 @@ function fsmd(paths, opts, fs) {
     });
   }
   mkfsmd1;
+  envCache = {};
   return (async function(name, ctx, args, next) {
-    var lpaths, handles, p, lenv, res, _i, _ref, _len, _i0, _ref0, _len0;
+    var lpaths, handles, p, envFile, res, _i, _ref, _len;
     var lpaths;
     lpaths = ctx.stack
       .filter((function(item) {
@@ -894,20 +908,20 @@ function fsmd(paths, opts, fs) {
     _ref = lpaths;
     for (_i = 0, _len = _ref.length; _i < _len; ++_i) {
       p = _ref[_i];
-      var lenv;
-      lenv = path.resolve(p, ".env");
-      if ((!lenv || !fs.existsSync(lenv))) continue;
-      lenv = env2vars(fs.readFileSync(lenv, "utf8"));
-      handles.push(envmd(lenv));
-    }
-    _ref0 = lpaths;
-    for (_i0 = 0, _len0 = _ref0.length; _i0 < _len0; ++_i0) {
-      p = _ref0[_i0];
+      var envFile;
+      envFile = path.resolve(p, ".env");
+      if (!envCache[envFile]) envCache[envFile] = ((!envFile || !fs.existsSync(envFile)) ? {} : env2vars(fs.readFileSync(envFile, "utf8")));
+      if (envCache[envFile][name]) return {
+        type: "text",
+        read: (async function() {
+          return envCache[envFile][name];
+        })
+      };
       handles.push(mkfsmd1(p));
     }
     while (handles.length) {
       var res;
-      res = await handles.shift()(name, ctx, args, next);
+      res = await handles.shift()(name, ctx, args);
       if (res) return res;
     }
     return next();
