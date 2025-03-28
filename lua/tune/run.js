@@ -838,7 +838,8 @@ Context.prototype.exec = (async function(name, args) {
   }
   return _ref;
 });
-Context.prototype.write = (async function(name, args, ws) {
+Context.prototype.write = (async function(name, args) {
+  var ws;
   ws = ws || this.ws;
   if (!ws.length) return;
   return ws[0](name, args, this, this.write.bind(this, name, args, ws.slice(1)));
@@ -1193,7 +1194,7 @@ async function text2ast(text, ctx) {
           var pname;
           pname = pargs.shift();
           var p;
-          p = await ctx.resolve(pname);
+          p = await ctx.resolve(pname, "processor");
           if (!p) throw new TuneError(("'" + pname + "' processor not found"), filename, row, col);
           if ((typeof p.exec !== "function")) throw new TuneError(("'" + pname + "' does not have exec function"), filename, row, col);
           try {
@@ -1691,9 +1692,9 @@ function text2run(text, ctx, opts) {
       ctype = res.headers.get("content-type");
       if ((!stream || ctype.includes("application/json"))) {
         res = await res.json();
-        if (((((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : undefined) || (res.object === "error"))) {
+        if (((((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res[0] !== "undefined") && (res[0] !== null) && !Number.isNaN(res[0]) && (typeof res[0].error !== "undefined") && (res[0].error !== null) && !Number.isNaN(res[0].error)) ? res[0].error : (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : undefined)) || (res.object === "error"))) {
           var err;
-          err = new TuneError(tpl("{type: }{message}", (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res)) ? res : undefined))));
+          err = new TuneError(tpl("{type: }{message}", (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res[0] !== "undefined") && (res[0] !== null) && !Number.isNaN(res[0]) && (typeof res[0].error !== "undefined") && (res[0].error !== null) && !Number.isNaN(res[0].error)) ? res[0].error : (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res)) ? res : undefined)))));
           err.stack = TuneError.ctx2stack(ctx);
           throw err;
         }
@@ -1734,7 +1735,7 @@ function text2run(text, ctx, opts) {
               return ((item === '[DONE]') ? item : JSON.parse(item));
             }));
             it = it.reduce((function(msg, chunk) {
-              var delta, tc;
+              var delta, tc, tcIdx;
               if ((chunk === "[DONE]")) return msg;
               var delta;
               delta = (((typeof chunk !== "undefined") && (chunk !== null) && !Number.isNaN(chunk) && (typeof chunk.choices !== "undefined") && (chunk.choices !== null) && !Number.isNaN(chunk.choices) && (typeof chunk.choices[0] !== "undefined") && (chunk.choices[0] !== null) && !Number.isNaN(chunk.choices[0]) && (typeof chunk.choices[0].delta !== "undefined") && (chunk.choices[0].delta !== null) && !Number.isNaN(chunk.choices[0].delta)) ? chunk.choices[0].delta : (((typeof {} !== "undefined") && ({} !== null) && !Number.isNaN({})) ? {} : undefined));
@@ -1750,13 +1751,14 @@ function text2run(text, ctx, opts) {
               } else if (delta.tool_calls) {
                 msg.tool_calls = msg.tool_calls || [];
                 tc = delta.tool_calls[0];
-                msg.tool_calls[tc.index] = msg.tool_calls[tc.index] || tc;
-                msg.tool_calls[tc.index].function.arguments += tc.function.arguments;
+                tcIdx = tc.index || 0;
+                msg.tool_calls[tcIdx] = msg.tool_calls[tcIdx] || tc;
+                msg.tool_calls[tcIdx].function.arguments += tc.function.arguments;
               }
               return msg;
             }), {
               role: "assistant",
-              content: null
+              content: ""
             });
             it = (ires = {
               value: msgs.concat(Array(it))
@@ -2588,9 +2590,11 @@ async function runFile(filename, ctx) {
       text = await node.read();
       var lctx;
       lctx = ctx.clone();
-      lctx.use(envmd(args[0]));
+      lctx.ms.unshift(envmd(args[0]));
       var res;
-      res = await text2run(text, lctx);
+      res = await text2run(text, lctx, {
+        stop: "assistant"
+      });
       _ref = res["slice"](-1)[0].content;
     } else if (parsed.ext === ".mjs") {
       var module;
@@ -2784,6 +2788,9 @@ function fsmd(paths, opts, fs) {
               }));
               _ref1 = {
                 type: "text",
+                fullname: fullname,
+                name: parsed1.name,
+                dirname: parsed.dir,
                 read: (async function() {
                   return "";
                 })
@@ -3007,10 +3014,11 @@ buf = "";
 split = {};
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (function(chunk) {
-  var _ref, _err;
+  var val, _ref, _err;
   buf += chunk;
   try {
-    _ref = run(JSON.parse(buf).input);
+    val = JSON.parse(buf);
+    _ref = run(val.input, val.stop || "step");
   } catch (_err) {
     _ref = undefined;
   }
@@ -3084,9 +3092,16 @@ function log(obj) {
   })) + "\n");
 }
 log;
-async function run(text) {
-  var res, chunk, all, lines, longFormatRegex, long, r, _err, _ref;
+async function run(text, stop) {
+  var stopVal, res, chunk, all, lines, longFormatRegex, long, r, _err, _ref;
   try {
+    stopVal = ((stop === "step" || stop === "assistant") ? stop : (function(msgs) {
+      var lastMsg;
+      var lastMsg;
+      lastMsg = msgs["slice"](-1)[0];
+      if (!lastMsg) return false;
+      return (-1 !== (((typeof lastMsg !== "undefined") && (lastMsg !== null) && !Number.isNaN(lastMsg) && (typeof lastMsg.content !== "undefined") && (lastMsg.content !== null) && !Number.isNaN(lastMsg.content)) ? lastMsg.content : (((typeof "" !== "undefined") && ("" !== null) && !Number.isNaN("")) ? "" : undefined)).indexOf(stop));
+    }));
     var res;
     var chunk;
     res = "";
@@ -3108,7 +3123,7 @@ async function run(text) {
       }, long)
     });
     r = text2run(text, ctx, {
-      stop: "step",
+      stop: stopVal,
       stream: true
     });
     r.promise.catch((function(e) {

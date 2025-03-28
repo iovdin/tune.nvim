@@ -604,9 +604,11 @@ async function runFile(filename, ctx) {
       text = await node.read();
       var lctx;
       lctx = ctx.clone();
-      lctx.use(envmd(args[0]));
+      lctx.ms.unshift(envmd(args[0]));
       var res;
-      res = await text2run(text, lctx);
+      res = await text2run(text, lctx, {
+        stop: "assistant"
+      });
       _ref = res["slice"](-1)[0].content;
     } else if (parsed.ext === ".mjs") {
       var module;
@@ -800,6 +802,9 @@ function fsmd(paths, opts, fs) {
               }));
               _ref1 = {
                 type: "text",
+                fullname: fullname,
+                name: parsed1.name,
+                dirname: parsed.dir,
                 read: (async function() {
                   return "";
                 })

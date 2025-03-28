@@ -2,7 +2,7 @@ const { runFile, fsmd } = require('./tunemd.js');
 const path = require("path"); 
 
 
-async function makeSchema(params, ictx) {
+async function makeSchema(params, ctx) {
    return runFile(path.join(__dirname, "schema.tool.chat"), ctx, params )
 }
 let dirs = [] 

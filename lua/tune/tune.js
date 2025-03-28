@@ -821,7 +821,8 @@ Context.prototype.exec = (async function(name, args) {
   }
   return _ref;
 });
-Context.prototype.write = (async function(name, args, ws) {
+Context.prototype.write = (async function(name, args) {
+  var ws;
   ws = ws || this.ws;
   if (!ws.length) return;
   return ws[0](name, args, this, this.write.bind(this, name, args, ws.slice(1)));
@@ -1176,7 +1177,7 @@ async function text2ast(text, ctx) {
           var pname;
           pname = pargs.shift();
           var p;
-          p = await ctx.resolve(pname);
+          p = await ctx.resolve(pname, "processor");
           if (!p) throw new TuneError(("'" + pname + "' processor not found"), filename, row, col);
           if ((typeof p.exec !== "function")) throw new TuneError(("'" + pname + "' does not have exec function"), filename, row, col);
           try {
@@ -1674,9 +1675,9 @@ function text2run(text, ctx, opts) {
       ctype = res.headers.get("content-type");
       if ((!stream || ctype.includes("application/json"))) {
         res = await res.json();
-        if (((((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : undefined) || (res.object === "error"))) {
+        if (((((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res[0] !== "undefined") && (res[0] !== null) && !Number.isNaN(res[0]) && (typeof res[0].error !== "undefined") && (res[0].error !== null) && !Number.isNaN(res[0].error)) ? res[0].error : (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : undefined)) || (res.object === "error"))) {
           var err;
-          err = new TuneError(tpl("{type: }{message}", (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res)) ? res : undefined))));
+          err = new TuneError(tpl("{type: }{message}", (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res[0] !== "undefined") && (res[0] !== null) && !Number.isNaN(res[0]) && (typeof res[0].error !== "undefined") && (res[0].error !== null) && !Number.isNaN(res[0].error)) ? res[0].error : (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res) && (typeof res.error !== "undefined") && (res.error !== null) && !Number.isNaN(res.error)) ? res.error : (((typeof res !== "undefined") && (res !== null) && !Number.isNaN(res)) ? res : undefined)))));
           err.stack = TuneError.ctx2stack(ctx);
           throw err;
         }
@@ -1717,7 +1718,7 @@ function text2run(text, ctx, opts) {
               return ((item === '[DONE]') ? item : JSON.parse(item));
             }));
             it = it.reduce((function(msg, chunk) {
-              var delta, tc;
+              var delta, tc, tcIdx;
               if ((chunk === "[DONE]")) return msg;
               var delta;
               delta = (((typeof chunk !== "undefined") && (chunk !== null) && !Number.isNaN(chunk) && (typeof chunk.choices !== "undefined") && (chunk.choices !== null) && !Number.isNaN(chunk.choices) && (typeof chunk.choices[0] !== "undefined") && (chunk.choices[0] !== null) && !Number.isNaN(chunk.choices[0]) && (typeof chunk.choices[0].delta !== "undefined") && (chunk.choices[0].delta !== null) && !Number.isNaN(chunk.choices[0].delta)) ? chunk.choices[0].delta : (((typeof {} !== "undefined") && ({} !== null) && !Number.isNaN({})) ? {} : undefined));
@@ -1733,13 +1734,14 @@ function text2run(text, ctx, opts) {
               } else if (delta.tool_calls) {
                 msg.tool_calls = msg.tool_calls || [];
                 tc = delta.tool_calls[0];
-                msg.tool_calls[tc.index] = msg.tool_calls[tc.index] || tc;
-                msg.tool_calls[tc.index].function.arguments += tc.function.arguments;
+                tcIdx = tc.index || 0;
+                msg.tool_calls[tcIdx] = msg.tool_calls[tcIdx] || tc;
+                msg.tool_calls[tcIdx].function.arguments += tc.function.arguments;
               }
               return msg;
             }), {
               role: "assistant",
-              content: null
+              content: ""
             });
             it = (ires = {
               value: msgs.concat(Array(it))

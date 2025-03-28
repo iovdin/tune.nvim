@@ -4,8 +4,6 @@ local ns_id = vim.api.nvim_create_namespace('tune_generating_text')
 
 
 -- TODO:
--- add {} to highlight syntax
--- add  c: ---- highlight syntax
 -- add markdown syntax support (inject syntax?)
 -- 3. test on new config
 -- 2. option for filenames on/off
@@ -47,6 +45,11 @@ end
 
 local function tune_chat(opts, callback)
   tune_kill()
+  local stop = "step"
+  if #opts.args > 0 then
+    stop = opts.args
+  end
+
 
   local filename = vim.fn.expand("%:p") -- Full path of the current buffer
   local bufnr = vim.api.nvim_get_current_buf()
@@ -198,7 +201,7 @@ local function tune_chat(opts, callback)
 
   --push_key('<Esc>')
   --push_key('<C-c>')
-  stdin:write(vim.json.encode({ input = table.concat(lines, "\n")}))
+  stdin:write(vim.json.encode({ input = table.concat(lines, "\n"), stop = stop}))
   
     -- Timer function removed - we'll highlight directly when data arrives
 
@@ -277,11 +280,13 @@ local M = {}
 local default_keymaps = {
   n = {
     ["<CR>"] = { ":TuneChat<CR>", "Execute TuneChat" },
+    ["<C-CR>"] = { ":TuneChat assistant<CR>", "Execute TuneChat until assistant answer" },
     ["<Esc>"] = { ":TuneKill<CR>", "Execute TuneKill" },    -- New keymap
     ["<C-c>"] = { ":TuneKill<CR>", "Execute TuneKill" },  -- New keymap
   },
   i = {
     ["<S-CR>"] = { "<Esc>:TuneChat<CR>", "Execute TuneChat in Insert Mode" },
+    ["<S-C-CR>"] = { "<Esc>:TuneChat assistant<CR>", "Execute TuneChat in Insert Mode until assistant answer" },
     ["<C-c>"] = { "<Esc>:TuneKill<CR>", "Execute TuneKill in Insert Mode" },  -- New keymap
   },
 }
@@ -290,7 +295,7 @@ local default_keymaps = {
 local function setup_buffer(opts)
 
   local keymaps = vim.tbl_deep_extend("force", default_keymaps, opts.keymaps or {})
-    vim.api.nvim_buf_create_user_command(0, "TuneChat", tune_chat, {})
+    vim.api.nvim_buf_create_user_command(0, "TuneChat", tune_chat, { nargs = '?'})
     vim.api.nvim_buf_create_user_command(0, "TuneKill", tune_kill, {})
 
       vim.bo.fileencoding = "utf-8"
