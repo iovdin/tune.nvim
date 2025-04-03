@@ -2,7 +2,6 @@ local uv = (vim.uv or vim.loop)
 -- Define highlight group for the text being generated
 local ns_id = vim.api.nvim_create_namespace('tune_generating_text')
 
-
 -- TODO:
 -- add markdown syntax support (inject syntax?)
 -- 3. test on new config
@@ -21,6 +20,7 @@ local ns_id = vim.api.nvim_create_namespace('tune_generating_text')
 local kill_cmd  = ':TuneKill<CR>'
 local tune_temp = {}
 local tune_pid = {}
+local folds = {}
 
 local function tune_kill()
   local bufnr = vim.api.nvim_get_current_buf()
@@ -30,6 +30,57 @@ local function tune_kill()
     uv.kill(pid, "sigkill")
     tune_pid[bufnr] = nil
   end
+end
+
+function slice(array, start, stop)
+    local result = {}
+    for i = start, (stop or #array) do
+        result[#result + 1] = array[i]
+    end
+    return result
+end
+
+local function text2roles(lines)
+  local roles = {
+    c = true,
+    comment = true,
+    s = true,
+    system = true,
+    u = true,
+    user = true,
+    a = true,
+    assistant = true,
+    tc = true,
+    tool_call = true,
+    tr = true,
+    tool_result = true,
+    err = true,
+    error = true,
+  }
+
+  local result = {}
+  local prev_role = nil
+  for index, item in ipairs(lines) do
+    role, content = item:match('^([%a_]+):(.*)')
+    if role and roles[role]  then
+      if prev_role then
+        prev_role['end'] = index - 1
+      end
+
+      prev_role = {
+        start = index,
+        role = role,
+        content = content
+      } 
+      table.insert(result, prev_role)
+    end
+
+
+    if prev_role then
+      prev_role['end'] = #lines
+    end
+  end
+  return result
 end
 
 local function set_cursor(bufnr, row, col)
@@ -42,6 +93,48 @@ local function set_cursor(bufnr, row, col)
       vim.api.nvim_win_set_cursor(win, {row, col})
    end
 end
+
+local tool_call_fold = {
+  tc = true,
+  tool_call = true,
+  tr = true,
+  tool_result = true
+}
+local function perform_autofolding(bufnr, lines, start_pos, shift, skip_last)
+  if lines == nil then
+    lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  end
+  folds[bufnr] = folds[bufnr] or {}
+  local buf_folds = folds[bufnr]
+  shift = shift or 1
+  start_pos = start_pos or 0
+  local roles = text2roles(lines)
+  for index, role in ipairs(roles) do
+    if skip_last and index == #roles then
+      break
+    end
+    local first_line = lines[role['start']]
+    if ((role['end'] - role['start']) > 8 or #first_line > 80) and tool_call_fold[role.role] then
+      local start = role['start'] + start_pos
+      if #first_line <=80 then
+        start = start + 2
+      end
+      local finish = role['end'] + start_pos  
+      local fold = string.format("%d,%d", start, finish)
+      local fstart = buf_folds[start] or -1
+
+      if fstart ~= finish then
+        -- vim.api.nvim_command(fold .. "fold")
+        buf_folds[start] = finish
+      end
+    end
+  end
+  if #roles > 0 then
+    return roles[#roles].start 
+  end
+  return 1
+end
+
 
 local function tune_chat(opts, callback)
   tune_kill()
@@ -83,11 +176,11 @@ local function tune_chat(opts, callback)
   }
 
   -- print("line: " .. line)
+  --print(vim.inspect(text2roles(lines)))
   for index, item in ipairs(lines) do
     index = index - 1
-    role, content = item:match('^(%a+):(.*)')
+    role, content = item:match('^([%a_]+):(.*)')
     if role and roles[role]  then
-      -- print(role .. " " .. index)
 
       if s_start == nil and index > line then
         s_start = index
@@ -101,7 +194,8 @@ local function tune_chat(opts, callback)
     s_start = s_end
   end
 
-  -- print("result: " .. s_start .. "-" .. s_end)
+
+  folds[bufnr] = {}
 
   local TUNE_PATH = ({
     vim.fn.getcwd(),
@@ -170,6 +264,7 @@ local function tune_chat(opts, callback)
         new_lines = vim.split(completion, "\n", { trimempty = false })
       end
 
+
       --if last_role == "assistant" then
       --  new_lines[#new_lines+1] = "u:  "
       --end
@@ -187,6 +282,8 @@ local function tune_chat(opts, callback)
           col = #new_lines[#new_lines]
       end
       set_cursor(bufnr, s_end, col)
+
+      perform_autofolding(bufnr)
     end)
 
 
@@ -212,60 +309,63 @@ local function tune_chat(opts, callback)
     end
   end)
   local input_data = ""
+  local shift = 1
   uv.read_start(channel, function(err, chunk)
     assert(not err, err)
-    if chunk then
-      input_data = input_data .. chunk
+    if chunk == nil then
+      return
+    end
+    input_data = input_data .. chunk
 
-      local data_lines = vim.split(input_data, "\n", { trimempty = true})
-      -- print(data)
-      local success, parsed = pcall(vim.json.decode, data_lines[#data_lines])
-      if success == nil then
-        print("data " .. input_data)
-        print("parsed " .. parsed)
-        exit()
-        return
-      end
-
-      split = parsed.split
-      -- last_role = parsed.lastRole
-
-      if split == nil then
-         return
-      end
-
-      if s_start == nil then
-        s_start = split["mid"]
-        s_end = split["end"]
-      end
-
-      completion = parsed.output
-      
-      -- Apply highlighting to the generated text
-      vim.schedule(function()
-        if completion and #completion > 0 then
-          -- First, clear any existing highlights in the namespace
-          vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
-          
-          -- Set the generated text in the buffer
-          local new_lines = vim.split(completion, "\n", { trimempty = false })
-          vim.api.nvim_buf_set_lines(bufnr, s_start, s_end, true, new_lines)
-          s_end = s_start + #new_lines
-          
-          -- Apply highlighting to each line of the generated text
-          for line_num = s_start, s_end - 1 do
-            if line_num < vim.api.nvim_buf_line_count(bufnr) then
-              local line = vim.api.nvim_buf_get_lines(bufnr, line_num, line_num + 1, false)[1]
-              vim.api.nvim_buf_add_highlight(bufnr, ns_id, "DiffChange", line_num, 0, #line)
-            end
-          end
-          
-          set_cursor(bufnr, s_end, 0)
-        end
-      end)
+    local data_lines = vim.split(input_data, "\n", { trimempty = true})
+    -- print(data)
+    local success, parsed = pcall(vim.json.decode, data_lines[#data_lines])
+    if success == nil then
+      print("data " .. input_data)
+      print("parsed " .. parsed)
+      exit()
+      return
     end
 
+    split = parsed.split
+    -- last_role = parsed.lastRole
+
+    if split == nil then
+      return
+    end
+
+    if s_start == nil then
+      s_start = split["mid"]
+      s_end = split["end"]
+    end
+
+    completion = parsed.output
+    -- Apply highlighting to the generated text
+    vim.schedule(function()
+      if not completion or #completion == 0 then
+        return
+      end
+      -- First, clear any existing highlights in the namespace
+      vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+
+      -- Set the generated text in the buffer
+      local new_lines = vim.split(completion, "\n", { trimempty = false })
+      local sl = slice(new_lines, shift)
+      vim.api.nvim_buf_set_lines(bufnr, s_start + shift - 1, s_end, true, sl)
+      s_end = s_start + #new_lines
+
+      -- Apply highlighting to each line of the generated text
+      for line_num = shift, #new_lines do
+        local line = new_lines[line_num]
+        vim.api.nvim_buf_add_highlight(bufnr, ns_id, "CursorLine", line_num + s_start -1, 0, #line)
+      end
+
+      shift = perform_autofolding(bufnr, new_lines, s_start, shift, true)
+      set_cursor(bufnr, s_end, 0)
+    end)
+
   end)
+
 
   uv.read_start(stderr, function(err, data)
     assert(not err, err)
@@ -292,28 +392,43 @@ local default_keymaps = {
 }
 
 
-local function setup_buffer(opts)
-
-  local keymaps = vim.tbl_deep_extend("force", default_keymaps, opts.keymaps or {})
-    vim.api.nvim_buf_create_user_command(0, "TuneChat", tune_chat, { nargs = '?'})
-    vim.api.nvim_buf_create_user_command(0, "TuneKill", tune_kill, {})
-
-      vim.bo.fileencoding = "utf-8"
-      -- how to overwrite these keymaps
-      for mode, mappings in pairs(keymaps) do
-        for lhs, rhs in pairs(mappings) do
-          if rhs ~= false then
-            local opts = {
-              noremap = true,
-              silent = true,
-              desc = rhs[2],
-              buffer = true, -- Buffer-local
-            }
-            vim.keymap.set(mode, lhs, rhs[1], opts)
-          end
-        end
-      end
+local function tune_save()
+  -- This is a placeholder for your implementation
+  -- You will implement the actual functionality yourself
+  print("TuneSave command called")
 end
+
+
+local function setup_buffer(opts)
+  local keymaps = vim.tbl_deep_extend("force", default_keymaps, opts.keymaps or {})
+  vim.api.nvim_buf_create_user_command(0, "TuneChat", tune_chat, { nargs = '?'})
+  vim.api.nvim_buf_create_user_command(0, "TuneKill", tune_kill, {})
+  vim.api.nvim_buf_create_user_command(0, "TuneSave", tune_save, {})
+
+  vim.bo.fileencoding = "utf-8"
+
+  -- Perform autofolding when buffer is loaded
+  local bufnr = vim.api.nvim_get_current_buf()
+
+  perform_autofolding(bufnr)
+
+  -- how to overwrite these keymaps
+  for mode, mappings in pairs(keymaps) do
+    for lhs, rhs in pairs(mappings) do
+      if rhs ~= false then
+        local opts = {
+          noremap = true,
+          silent = true,
+          desc = rhs[2],
+          buffer = true, -- Buffer-local
+        }
+        vim.keymap.set(mode, lhs, rhs[1], opts)
+      end
+    end
+  end
+end
+
+
 
 local function setup(opts)
   local keymaps = vim.tbl_deep_extend("force", default_keymaps, opts.keymaps or {})
@@ -324,7 +439,6 @@ local function setup(opts)
     setup_buffer(opts)
   end
 
-
   vim.api.nvim_create_autocmd("FileType", {
     group = "ChatAutoComplete",
     pattern = "chat",
@@ -332,6 +446,18 @@ local function setup(opts)
        setup_buffer(opts)
     end,
   })
+  
+  -- Add an autocmd for when a file is opened
+  vim.api.nvim_create_autocmd("BufReadPost", {
+    group = "ChatAutoComplete",
+    pattern = "*.chat",
+    callback = function()
+      local bufnr = vim.api.nvim_get_current_buf()
+      perform_autofolding(bufnr)
+    end,
+  })
+
+
 
 
   local ok, parsers = pcall(require, "nvim-treesitter.parsers")
