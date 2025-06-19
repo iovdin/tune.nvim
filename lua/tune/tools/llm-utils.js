@@ -71,7 +71,7 @@ function createProviderContext(providerName, options) {
   const getModels = createModelCache(providerName, apiModelFetcher);
   const envr = /^[A-Z_0-9]+$/;
 
-  return async function llmProvider(name, args) {
+  return async function providerContext(name, args) {
     // respond only to llm request or if type is 'any'
     if (args.type !== 'any' && args.type !== 'llm') {
       return;
@@ -88,7 +88,6 @@ function createProviderContext(providerName, options) {
     }
     
     const apiKey = await context.read(apiKeyEnv);
-
     if (!apiKey) {
       return;
     }
@@ -138,7 +137,7 @@ function createProviderContext(providerName, options) {
           return createExecFunction(model, payload, key, this);
         },
       };
-    } catch (e) {
+    } catch (e ) {
       console.log(e)
       return
     }

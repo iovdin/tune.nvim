@@ -420,7 +420,7 @@ async function initContext(params) {
 }
 initContext;
 async function text2run(params, stream) {
-  var filename, stop, text, format, ctx, stopVal, longFormatRegex, long, res, r, chunk, itergaFWgsi;
+  var filename, stop, text, format, ctx, stopVal, longFormatRegex, long, res, r, chunk, itergqJLkqD;
   var filename;
   var stop;
   var text;
@@ -456,7 +456,7 @@ async function text2run(params, stream) {
     stream: true
   });
   chunk = {};
-  itergaFWgsi = new AsyncIter();
+  itergqJLkqD = new AsyncIter();
   (async function($lastRes) {
     var _ref;
     try {
@@ -464,19 +464,19 @@ async function text2run(params, stream) {
         chunk = await r.next();
         res = (chunk.value || "");
         $lastRes = ((format === "json") ? res : tune.msg2text(res, long)) || $lastRes;
-        itergaFWgsi.result = {
+        itergqJLkqD.result = {
           value: $lastRes
         }
       }
-      _ref = itergaFWgsi.result = {
+      _ref = itergqJLkqD.result = {
         value: $lastRes,
         done: true
       }
     } catch (e) {
-      _ref = (itergaFWgsi.err = e);
+      _ref = (itergqJLkqD.err = e);
     }
     return _ref;
   })();
-  return itergaFWgsi;
+  return itergqJLkqD;
 }
 text2run;
