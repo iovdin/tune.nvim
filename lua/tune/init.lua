@@ -33,14 +33,14 @@ local function tune_kill()
 end
 
 local function set_cursor(bufnr, row, col)
-   if row > vim.api.nvim_buf_line_count(bufnr) then
-     return
-   end
-   local win = vim.fn.bufwinid(bufnr)
+  if row > vim.api.nvim_buf_line_count(bufnr) then
+    return
+  end
+  local win = vim.fn.bufwinid(bufnr)
 
-   if win ~= nil then
-      vim.api.nvim_win_set_cursor(win, {row, col})
-   end
+  if win ~= nil then
+    vim.api.nvim_win_set_cursor(win, {row, col})
+  end
 end
 
 local function tune_chat(opts, callback)
@@ -85,7 +85,7 @@ local function tune_chat(opts, callback)
   -- print("line: " .. line)
   for index, item in ipairs(lines) do
     index = index - 1
-    role, content = item:match('^(%a+):(.*)')
+    role, content = item:match('^([%a_]+):(.*)')
     if role and roles[role]  then
       -- print(role .. " " .. index)
 
@@ -105,7 +105,7 @@ local function tune_chat(opts, callback)
 
   local TUNE_PATH = ({
     vim.fn.getcwd(),
-    dirname,
+    dirname .. "/tools",
   })
 
   local env = vim.loop.os_environ()
@@ -141,59 +141,59 @@ local function tune_chat(opts, callback)
     env = env
   }, function(code, signal)
       stdout:close()
-    stderr:close()
-    stdin:close()
-    channel:close()
-    
-    -- Clear the highlighting when generation is complete
-    vim.schedule(function()
-      vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
-    end)
+      stderr:close()
+      stdin:close()
+      channel:close()
 
-    -- handle:close()
+      -- Clear the highlighting when generation is complete
+      vim.schedule(function()
+        vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+      end)
+
+      -- handle:close()
       --
-    -- print("on end " .. pid)
-    if tune_pid[bufnr] == pid then
-      tune_pid[bufnr] = nil
-    end
-
-
-    vim.schedule(function()
-      if split == nil or tune_pid[bufnr] ~= nil then
-        return
+      -- print("on end " .. pid)
+      if tune_pid[bufnr] == pid then
+        tune_pid[bufnr] = nil
       end
 
 
-      if completion == nil then
-        new_lines = { }
-      else
-        new_lines = vim.split(completion, "\n", { trimempty = false })
-      end
+      vim.schedule(function()
+        if split == nil or tune_pid[bufnr] ~= nil then
+          return
+        end
 
-      --if last_role == "assistant" then
-      --  new_lines[#new_lines+1] = "u:  "
-      --end
 
-      -- vim.cmd("earlier " ..  num_changes)
-      -- vim.api.nvim_buf_set_lines(bufnr, split["mid"], split["end"], true, new_lines)
-      if s_start == nil then
-        s_start = split["mid"]
-        s_end = split["end"]
-      end
-      vim.api.nvim_buf_set_lines(bufnr, s_start, s_end, true, new_lines)
-      s_end = split["mid"] + #new_lines 
-      col = 0
-      if #new_lines > 0 then
+        if completion == nil then
+          new_lines = { }
+        else
+          new_lines = vim.split(completion, "\n", { trimempty = false })
+        end
+
+        --if last_role == "assistant" then
+        --  new_lines[#new_lines+1] = "u:  "
+        --end
+
+        -- vim.cmd("earlier " ..  num_changes)
+        -- vim.api.nvim_buf_set_lines(bufnr, split["mid"], split["end"], true, new_lines)
+        if s_start == nil then
+          s_start = split["mid"]
+          s_end = split["end"]
+        end
+        vim.api.nvim_buf_set_lines(bufnr, s_start, s_end, true, new_lines)
+        s_end = split["mid"] + #new_lines 
+        col = 0
+        if #new_lines > 0 then
           col = #new_lines[#new_lines]
+        end
+        set_cursor(bufnr, s_end, col)
+      end)
+
+
+      if callback then
+        callback(code, signal)
       end
-      set_cursor(bufnr, s_end, col)
     end)
-
-
-    if callback then
-      callback(code, signal)
-    end
-  end)
 
 
   tune_pid[bufnr] = pid
@@ -202,8 +202,8 @@ local function tune_chat(opts, callback)
   --push_key('<Esc>')
   --push_key('<C-c>')
   stdin:write(vim.json.encode({ input = table.concat(lines, "\n"), stop = stop}))
-  
-    -- Timer function removed - we'll highlight directly when data arrives
+
+  -- Timer function removed - we'll highlight directly when data arrives
 
   uv.read_start(stdout, function(err, data)
     assert(not err, err)
@@ -231,7 +231,7 @@ local function tune_chat(opts, callback)
       -- last_role = parsed.lastRole
 
       if split == nil then
-         return
+        return
       end
 
       if s_start == nil then
@@ -240,18 +240,18 @@ local function tune_chat(opts, callback)
       end
 
       completion = parsed.output
-      
+
       -- Apply highlighting to the generated text
       vim.schedule(function()
         if completion and #completion > 0 then
           -- First, clear any existing highlights in the namespace
           vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
-          
+
           -- Set the generated text in the buffer
           local new_lines = vim.split(completion, "\n", { trimempty = false })
           vim.api.nvim_buf_set_lines(bufnr, s_start, s_end, true, new_lines)
           s_end = s_start + #new_lines
-          
+
           -- Apply highlighting to each line of the generated text
           for line_num = s_start, s_end - 1 do
             if line_num < vim.api.nvim_buf_line_count(bufnr) then
@@ -259,7 +259,7 @@ local function tune_chat(opts, callback)
               vim.api.nvim_buf_add_highlight(bufnr, ns_id, "DiffChange", line_num, 0, #line)
             end
           end
-          
+
           set_cursor(bufnr, s_end, 0)
         end
       end)
@@ -269,9 +269,9 @@ local function tune_chat(opts, callback)
 
   uv.read_start(stderr, function(err, data)
     assert(not err, err)
-    if data then
-      print("stderr: " .. data)
-    end
+    --if data then
+    --  print("stderr: " .. data)
+    --end
   end)
 end
 
@@ -293,29 +293,52 @@ local default_keymaps = {
 
 
 local function setup_buffer(opts)
-
   local keymaps = vim.tbl_deep_extend("force", default_keymaps, opts.keymaps or {})
-    vim.api.nvim_buf_create_user_command(0, "TuneChat", tune_chat, { nargs = '?'})
-    vim.api.nvim_buf_create_user_command(0, "TuneKill", tune_kill, {})
+  vim.api.nvim_buf_create_user_command(0, "TuneChat", tune_chat, { nargs = '?'})
+  vim.api.nvim_buf_create_user_command(0, "TuneKill", tune_kill, {})
 
-      vim.bo.fileencoding = "utf-8"
-      -- how to overwrite these keymaps
-      for mode, mappings in pairs(keymaps) do
-        for lhs, rhs in pairs(mappings) do
-          if rhs ~= false then
-            local opts = {
-              noremap = true,
-              silent = true,
-              desc = rhs[2],
-              buffer = true, -- Buffer-local
-            }
-            vim.keymap.set(mode, lhs, rhs[1], opts)
-          end
-        end
+  vim.bo.fileencoding = "utf-8"
+  -- how to overwrite these keymaps
+  for mode, mappings in pairs(keymaps) do
+    for lhs, rhs in pairs(mappings) do
+      if rhs ~= false then
+        local opts = {
+          noremap = true,
+          silent = true,
+          desc = rhs[2],
+          buffer = true, -- Buffer-local
+        }
+        vim.keymap.set(mode, lhs, rhs[1], opts)
       end
+    end
+  end
+
+  -- Set up chat-specific text objects
+  -- 'ar' for @chat_entity and 'ir' for @content
+  -- pcall(require, 'nvim-treesitter.textobjects.select') 
+  -- if vim.bo.filetype == "chat" then
+  --   -- For visual mode
+  --   vim.keymap.set('x', 'ar', function()
+  --     require('nvim-treesitter.textobjects.select').select_textobject('@chat_entity', 'textobjects')
+  --   end, { buffer = true, desc = "Select around chat entity" })
+  --
+  --   vim.keymap.set('x', 'ir', function()
+  --     require('nvim-treesitter.textobjects.select').select_textobject('@content', 'textobjects')
+  --   end, { buffer = true, desc = "Select inner chat content" })
+  --
+  --   -- For operator-pending mode
+  --   vim.keymap.set('o', 'ar', function()
+  --     require('nvim-treesitter.textobjects.select').select_textobject('@chat_entity', 'textobjects')
+  --   end, { buffer = true, desc = "Select around chat entity" })
+  --
+  --   vim.keymap.set('o', 'ir', function()
+  --     require('nvim-treesitter.textobjects.select').select_textobject('@content', 'textobjects')
+  --   end, { buffer = true, desc = "Select inner chat content" })
+  -- end
 end
 
 local function setup(opts)
+
   local keymaps = vim.tbl_deep_extend("force", default_keymaps, opts.keymaps or {})
 
   vim.api.nvim_create_augroup("ChatAutoComplete", { clear = true })
@@ -329,7 +352,7 @@ local function setup(opts)
     group = "ChatAutoComplete",
     pattern = "chat",
     callback = function()
-       setup_buffer(opts)
+      setup_buffer(opts)
     end,
   })
 
@@ -353,6 +376,7 @@ local function setup(opts)
     },
     filetype = "chat",
   }
+
 end
 
 
