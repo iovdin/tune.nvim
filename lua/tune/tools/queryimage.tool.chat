@@ -1,0 +1,4 @@
+s: @mistral-small-latest
+You help answer questions about an image
+u: @{ filename | resolve }
+@text

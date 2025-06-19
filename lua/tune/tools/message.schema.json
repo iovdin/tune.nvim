@@ -1,0 +1,21 @@
+{
+  "description": "Process and generate messages based on input parameters and file context",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "filename": {
+        "type": "string",
+        "description": "File name to read/write chat history, should have .chat extension"
+      },
+      "system": {
+        "type": "string",
+        "description": "Filename that contains system prompt, used once when filename is empty"
+      },
+      "text": {
+        "type": "string",
+        "description": "User input message to process"
+      }
+    },
+    "required": ["filename", "text"]
+  }
+}
