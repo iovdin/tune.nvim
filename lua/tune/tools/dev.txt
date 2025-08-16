@@ -1,6 +1,0 @@
-@claude-sonnet-4-20250514
-@rf @wf @sh @patch
-current filestructure:
-```
-@{| shp git ls-files }
-```

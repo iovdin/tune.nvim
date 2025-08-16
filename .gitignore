@@ -2,3 +2,4 @@ chats
 .cache
 lua/tune/.env
 __pycache__
+rpc.log

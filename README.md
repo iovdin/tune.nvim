@@ -1,10 +1,21 @@
 # tune.nvim
 
-A Neovim plugin to chat with LLM in buffer.
+A Neovim plugin to chat with LLM in buffer. [Tune](https://github.com/iovdin/tune)
 
 ## Demo
 
-<img src="https://github.com/iovdin/tune/blob/770f382a03a25e15eeef293f553b6aee0f3531f6/docs/assets/gifs/tune.gif">
+<video src="https://github.com/user-attachments/assets/23f8ab30-58db-4159-8761-f212a7960e0c">
+</video>
+
+## Quick Start
+
+1. Install the plugin with your preferred package manager
+2. Install `npm install -g tune-sdk`
+3. Initialize tune-sdk `tune-sdk init` 
+4. edit `~/.tune/.env` add `OPENAI_KEY` and other keys
+5. Run `:TuneNew` to create a new chat buffer
+6. Type your message and press `<CR>` to send
+7. Use `:TuneSave` to save your conversation with an AI-generated filename
 
 ## Why tune.nvim?
 
@@ -14,6 +25,9 @@ A Neovim plugin to chat with LLM in buffer.
 - **Tool Integration**: Create and use custom tools (Python, JavaScript, PHP, or even chat-based) for extended functionality
 - **Flexible LLM Configuration**: Support for different LLM providers through simple configuration files
 - **Structured Chat Format**: Clear syntax for different message types (system, user, assistant, etc.)
+- **Smart Text Objects**: Navigate and edit chat conversations with purpose-built text objects
+- **Autocomplete**: Auto-complete models tools and filenames
+- **AI-Generated Filenames**: Automatically generate meaningful filenames for your chat sessions
 
 
 ## Features
@@ -22,40 +36,41 @@ A Neovim plugin to chat with LLM in buffer.
 
 Use `.chat` files with a clear syntax for different message types:
 ```chat
- s: system prompt
- u: user message
- a: assistant reply
- c: comment
- tc: tool call
- tr: result of a tool call
- err: error that occurred
+system: system prompt
+user: user message
+assistant: assistant reply
+comment: comment
+tool_call: tool call
+tool_result: result of a tool call
+err: error that occurred
 ```
+
+
 
 ### Variable Expansion
 
 Include external content in your chats:
 ```chat
- s: @system           # Expand from system.txt
- u: @env_variable     # Use environment variables
- u: describe @image   # Include images
+system: 
+@system           # Expand from system.txt
+user: 
+describe @image   # Include images
 ```
 
-### Multiple Chats
 
-Separate multiple conversations in a single file:
-```chat
- s: You're groot
- u: hi how are you?
- a: I am Groot.
- c: ---
- u: What is the meaning of life?
- a: 42
-```
+### Commands
+
+- `:TuneNew [system_prompt]` - Create a new chat buffer (optionally with a system prompt)
+- `:TuneChat [stop]` - Execute chat completion (stops at 'step' by default, or 'assistant' if specified)
+- `:TuneSave` - Save buffer with an AI-generated filename
+- `:TuneKill` - Cancel ongoing generation
 
 ### Default Keymaps
 
 - `<CR>` in normal mode: Execute TuneChat
+- `<C-CR>` in normal mode: Execute TuneChat until assistant answer
 - `<S-CR>` in insert mode: Execute TuneChat
+- `<S-C-CR>` in insert mode: Execute TuneChat until assistant answer
 - `<Esc>` or `<C-c>` in any mode: Cancel generation
 
 You can customize the keymaps in your configuration:
@@ -65,16 +80,45 @@ require("tune").setup({
   keymaps = {
     n = {
       ["<CR>"] = { ":TuneChat<CR>", "Execute TuneChat" },
+      ["<C-CR>"] = { ":TuneChat assistant<CR>", "Execute TuneChat until assistant answer" },
       ["<Esc>"] = { ":TuneKill<CR>", "Execute TuneKill" },
       ["<C-c>"] = { ":TuneKill<CR>", "Execute TuneKill" },
     },
     i = {
       ["<S-CR>"] = { "<Esc>:TuneChat<CR>", "Execute TuneChat in Insert Mode" },
+      ["<S-C-CR>"] = { "<Esc>:TuneChat assistant<CR>", "Execute TuneChat in Insert Mode until assistant answer" },
       ["<C-c>"] = { "<Esc>:TuneKill<CR>", "Execute TuneKill in Insert Mode" },
     },
   }
 })
 ```
+
+### Text Objects
+
+The plugin provides custom text objects for easier navigation and editing in chat files:
+
+- `ar` / `ir` - Around/inner role content (select entire role block or just content)
+- `ac` / `ic` - Around/inner chat conversation (select entire chat or just content between separators)
+- `at` / `it` - Around/inner tail (select from cursor to end of current chat)
+
+Examples:
+- `var` - Select around current role (including the role header)
+- `vir` - Select just the content of current role
+- `dac` - Delete entire current chat conversation
+- `cit` - Change content from cursor to end of chat
+
+### Completion Support
+
+The plugin integrates with [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) to provide:
+
+1. **Snippet completion**: Type `u`, `s`, or `c` and press your completion key to expand to role headers
+2. **Variable completion**: Type `@` followed by partial variable names to see available expansions
+
+Built-in variables include:
+- `@editor/filename` - Current file path
+- `@editor/buffer` - Current buffer content
+- `@editor/buffers` - List of all open buffers
+- `@editor/selection` - Currently selected text
 
 
 ## Installation
@@ -84,6 +128,7 @@ require("tune").setup({
 Before installing, ensure you have:
 - Neovim >= 0.8.0
 - [nvim-treesitter](https://github.com/nvim-treesitter/nvim-treesitter) installed
+- [tune-sdk](https://github.com/iovdin/tune) installed globally `npm install -g tune-sdk`  
 
 ### Using [lazy.nvim](https://github.com/folke/lazy.nvim) (recommended)
 
@@ -99,7 +144,6 @@ Add this to your Neovim configuration:
   config = function() 
     require("tune").setup({})
   end,
-  ft = { "chat" }
 },
 ```
 
@@ -108,7 +152,6 @@ Add this to your Neovim configuration:
 ```lua
 use {
   'iovdin/tune.nvim',
-  ft = { 'chat' },
   config = function() 
     require("tune").setup({})
   end,
@@ -165,9 +208,25 @@ After installation, make sure to:
     end
 },
 ```
-
 Alternatively, you can install the chat parser manually after installation:
 
 ```
 :TSInstall chat
+```
+
+2. (Optional) For completion support, ensure you have [nvim-cmp](https://github.com/hrsh7th/nvim-cmp) installed and add the tune source:
+
+```lua
+{
+  "hrsh7th/nvim-cmp",
+  config = function()
+    local cmp = require('cmp')
+    cmp.setup({
+      sources = cmp.config.sources({
+        { name = 'tune' },  -- Add tune completion source
+        -- your other sources...
+      })
+    })
+  end
+}
 ```

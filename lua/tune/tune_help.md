@@ -39,7 +39,7 @@ use `c: ---` as delimiter
 
 *Variable Expansion*
 
-It is possible to use {name} for variable expansion, variables are kept in files or environment
+It is possible to use @name for variable expansion, variables are kept in files or environment
 e.g. there is a file system.txt in the folder
 ```chat
  s: @system
@@ -107,8 +107,6 @@ module.exports = async function(payload, ctx) {
   })
 }
 ```
-
-
 
 Use variable expansion to apply this config
 ```chat
